@@ -4,8 +4,13 @@ import { calibrate } from './calibration.js';
 import { createBeeper } from './beep.js';
 import { createGraph } from './graph.js';
 import { createRecorder } from './recorder.js';
+import { loadSettings, saveSettings, clearSettings } from './storage.js';
 import { createMotion } from './motion.js';
 import { createSource, listCameras } from './source.js';
+
+const defaults = structuredClone(config);
+loadSettings(config);
+const persist = () => saveSettings(config);
 
 const $ = (id) => document.getElementById(id);
 const video = $('video'), preview = $('preview'), pctx = preview.getContext('2d');
@@ -119,6 +124,7 @@ function collectCalibration(m, t) {
   config.startRatio = c.startRatio;
   config.endRatio = c.endRatio;
   syncInputs();
+  persist();
   const pct = (v) => `${(v * 100).toFixed(3)}%`;
   log('calib', `CALIBRATION    n ${c.n}  mean ${pct(c.mean)}  σ ${pct(c.sigma)}  max ${pct(c.max)}  -> start ${pct(c.startRatio)}  end ${pct(c.endRatio)}`);
   if (c.hint) log('rejected', `CALIBRATION    ${c.hint}`);
@@ -213,7 +219,7 @@ function addInput(parent, obj, key, opts = {}) {
   if (typeof obj[key] === 'boolean') {
     input.type = 'checkbox';
     input.checked = obj[key];
-    input.onchange = () => { obj[key] = input.checked; };
+    input.onchange = () => { obj[key] = input.checked; persist(); };
   } else {
     input.type = 'number';
     input.step = opts.step ?? 'any';
@@ -222,7 +228,7 @@ function addInput(parent, obj, key, opts = {}) {
     input.value = obj[key];
     input.oninput = () => {
       const v = parseFloat(input.value);
-      if (Number.isFinite(v)) obj[key] = v;
+      if (Number.isFinite(v)) { obj[key] = v; persist(); }
     };
   }
   label.append(input);
@@ -258,7 +264,21 @@ $('roiPreset').onchange = (e) => {
   if (!roiPresets[e.target.value]) return;
   Object.assign(config.roi, roiPresets[e.target.value]);
   syncInputs();
+  persist();
 };
+$('resetDefaults').onclick = () => {
+  const { roi, ...rest } = structuredClone(defaults);
+  Object.assign(config, rest);
+  Object.assign(config.roi, roi);      // in place: the ROI inputs hold this object
+  clearSettings();
+  syncInputs();
+  syncPresetSelect();
+};
+function syncPresetSelect() {
+  const name = Object.keys(roiPresets).find((k) => Object.keys(config.roi).every((p) => config.roi[p] === roiPresets[k][p]));
+  $('roiPreset').value = name ?? 'custom';
+}
+syncPresetSelect();
 $('roiInputs').oninput = () => { $('roiPreset').value = 'custom'; };
 
 fillCameras().catch(() => {});
