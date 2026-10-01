@@ -17,3 +17,4 @@ canvas { background: #000; max-width: 100%; display: block; }
 #log .end { color: #6cf; }
 #log .suppressed { color: #fc6; }
 #log .rejected { color: #f66; }
+#log .global { color: #f9c; }

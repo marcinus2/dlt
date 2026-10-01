@@ -6,12 +6,13 @@ import { createSource, listCameras } from './source.js';
 const $ = (id) => document.getElementById(id);
 const video = $('video'), preview = $('preview'), pctx = preview.getContext('2d');
 const source = createSource(video, config);
-const motion = createMotion(config);
+const motion = createMotion(config, { globalGuard: true });
 const detector = createDetector(config);
 $('diff').append(motion.diffCanvas);
 
 let detecting = false;
 let last = { ratio: 0, globalRatio: 0, global: false };
+let flagged = false;                           // global guard tripped (not just a missing previous frame)
 let passes = 0, lastPass = null, dropped = 0, tSource = '-';
 let fpsCount = 0, fpsStart = performance.now(), fps = 0;
 
@@ -63,7 +64,7 @@ function setDetecting(on) {
   if (on) {
     motion.reset();
     detector.reset();                          // warm-up starts at the first sample
-    passes = 0; lastPass = null; dropped = 0;
+    passes = 0; lastPass = null; dropped = 0; flagged = false;
   }
 }
 
@@ -74,6 +75,9 @@ function onFrame(frame) {
   if (frame.seeked) detector.reset(frame.t);   // file loop / seek
   const m = motion.process(video, config.roi);
   last = m;
+  const nowFlagged = m.globalRatio > config.globalGuardRatio;
+  if (nowFlagged && !flagged) log('global', `GLOBAL CHANGE  outside ROI ${(m.globalRatio * 100).toFixed(1)}%, frames ignored`);
+  flagged = nowFlagged;
   dropped += frame.dropped;
   tSource = frame.tSource;
   fpsCount++;
