@@ -183,3 +183,14 @@ test('Δstart and Δpeak between consecutive passes', () => {
   assert.equal(ends[1].dPeak, 5100);
   assert.equal(ends[1].dStart, 5000);
 });
+
+test('after a long motion the detector re-arms only after quiet frames', () => {
+  // motion continues past the cutoff, then stops, then a real pass
+  const long = seq([...rep(HI, 40), LO, LO, LO], { t0: 0 });
+  const next = seq([HI, HI, HI, LO, LO, LO], { t0: 5000 });
+  const { types } = run([...long, ...next]);
+  assert.deepEqual(types, ['MOTION_START', 'REJECTED', 'MOTION_START', 'MOTION_END']);
+  // a single quiet frame in the tail is not enough
+  const tail = seq([...rep(HI, 32), LO, HI, HI, HI, HI, LO, LO, LO, LO]);
+  assert.deepEqual(run(tail).types, ['MOTION_START', 'REJECTED']);
+});

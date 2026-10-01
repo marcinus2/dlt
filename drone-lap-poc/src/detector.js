@@ -14,6 +14,7 @@ export function createDetector(config) {
   let suppressed = false;
   let firstT = 0, candFrames = 0, candPeakT = 0, candPeak = 0;
   let quiet = 0, activeT = 0;
+  let rearm = false;         // after a long motion: need endHoldFrames quiet frames before IDLE can trigger
 
   function reset(t) {
     state = WARMUP;
@@ -21,6 +22,7 @@ export function createDetector(config) {
     pass = null;
     suppressed = false;
     quiet = 0;
+    rearm = false;
   }
 
   // CANDIDATE confirmed: start the pass record, or suppress it inside the cooldown.
@@ -53,6 +55,12 @@ export function createDetector(config) {
     const neutral = sample.global || sample.gapReset;
 
     if (state === IDLE) {
+      if (rearm) {
+        if (neutral) return events;
+        quiet = ratio < config.endRatio ? quiet + 1 : 0;
+        if (quiet >= config.endHoldFrames) { rearm = false; quiet = 0; }
+        return events;
+      }
       if (neutral || ratio < config.startRatio) return events;
       firstT = t; candFrames = 1; candPeakT = t; candPeak = ratio;
       state = CANDIDATE;
@@ -73,6 +81,8 @@ export function createDetector(config) {
         }
         state = IDLE;
         pass = null;
+        rearm = true;
+        quiet = 0;
         return events;
       }
       if (neutral) return events;
