@@ -1,6 +1,7 @@
 import { config, roiPresets } from './config.js';
 import { createDetector } from './detector.js';
 import { calibrate } from './calibration.js';
+import { createBeeper } from './beep.js';
 import { createGraph } from './graph.js';
 import { createMotion } from './motion.js';
 import { createSource, listCameras } from './source.js';
@@ -10,6 +11,7 @@ const video = $('video'), preview = $('preview'), pctx = preview.getContext('2d'
 const source = createSource(video, config);
 const motion = createMotion(config, { globalGuard: true });
 const detector = createDetector(config);
+const beeper = createBeeper();
 const graph = createGraph($('graph'), config);
 $('diff').append(motion.diffCanvas);
 
@@ -122,6 +124,7 @@ function onEvent(e) {
   const s = (ms) => (ms === null ? '-' : `${(ms / 1000).toFixed(3)} s`);
   switch (e.type) {
     case 'MOTION_START':
+      beeper.beep();
       log('start', `MOTION START   Δstart ${s(e.dStart)}`);
       break;
     case 'MOTION_END':
@@ -229,6 +232,10 @@ for (const key of Object.keys(config)) {
 for (const key of ['x', 'y', 'width', 'height']) {
   addInput($('roiInputs'), config.roi, key, { step: 0.01, min: 0, max: 1 });
 }
+
+// --- beep ---
+document.addEventListener('click', () => beeper.unlock());   // AudioContext needs a user gesture
+$('mute').onchange = (e) => { beeper.muted = e.target.checked; };
 
 // --- ROI presets ---
 $('roiPreset').replaceChildren(...Object.keys(roiPresets).map((k) => new Option(k, k)), new Option('custom', 'custom'));
