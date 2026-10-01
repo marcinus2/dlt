@@ -37,10 +37,10 @@ Per camera frame (`requestVideoFrameCallback`, fallback rAF):
 
 ### Detector state machine (`src/detector.js`, pure)
 ```
-WARMUP ──warmupMs──▶ IDLE ──ratio ≥ start──▶ CANDIDATE ──minMotionFrames──▶ MOTION ──endHoldFrames quiet──▶ IDLE
+WARMUP ──warmupMs──▶ IDLE ──ratio ≥ start──▶ CANDIDATE ──minMotionMs──▶ MOTION ──endHoldMs quiet──▶ IDLE
                       ▲                          │ ratio < start                │ t > maxMotionMs
                       └──────────────────────────┘                              ▼
-                                                              REJECTED → IDLE (re-arm after endHoldFrames quiet frames)
+                                                              REJECTED → IDLE (re-arm after endHoldMs quiet)
 ```
 - `MOTION_START` is backdated to the first motion frame. Within `cooldownMs` of the last accepted start the pass is `SUPPRESSED` instead (still tracked to its end, no `MOTION_END`).
 - Quiet = `ratio < endRatio` (hysteresis). `MOTION_END` is stamped at the last active frame.
@@ -64,8 +64,8 @@ WARMUP ──warmupMs──▶ IDLE ──ratio ≥ start──▶ CANDIDATE ─
 | `globalGuardRatio` | 0.2 | outside-ROI change fraction that flags a frame as global |
 | `startRatio` | 0.02 | ROI fraction to start motion |
 | `endRatio` | 0.01 | ROI fraction below which motion may end |
-| `minMotionFrames` | 2 | consecutive frames to confirm a start |
-| `endHoldFrames` | 3 | consecutive quiet frames to confirm an end |
+| `minMotionMs` | 30 | motion must last this long (first to latest frame) to confirm a start; 0 = one frame |
+| `endHoldMs` | 60 | quiet for this long to confirm an end |
 | `cooldownMs` | 1500 | min gap between accepted starts |
 | `maxMotionMs` | 3000 | longer motion is rejected |
 | `warmupMs` | 1500 | ignore after start (auto-exposure settling) |

@@ -13,15 +13,15 @@ export function createDetector(config) {
   let pass = null;           // pass record: startT, peakT, peakRatio, frames, prevStartT, prevPeakT
   let suppressed = false;
   let firstT = 0, candFrames = 0, candPeakT = 0, candPeak = 0;
-  let quiet = 0, activeT = 0;
-  let rearm = false;         // after a long motion: need endHoldFrames quiet frames before IDLE can trigger
+  let quiet = 0, quietT = null, activeT = 0;   // quiet: quiet frame count, quietT: time of the first quiet frame
+  let rearm = false;         // after a long motion: need endHoldMs of quiet before IDLE can trigger
 
   function reset(t) {
     state = WARMUP;
     warmUntil = t === undefined ? null : t + config.warmupMs;
     pass = null;
     suppressed = false;
-    quiet = 0;
+    quiet = 0; quietT = null;
     rearm = false;
     lastStartT = lastPeakT = null;   // the time base may have jumped (file loop/seek): old times are meaningless
   }
@@ -33,7 +33,7 @@ export function createDetector(config) {
       startT: firstT, peakT: candPeakT, peakRatio: candPeak, frames: candFrames,
       prevStartT: lastStartT, prevPeakT: lastPeakT,
     };
-    quiet = 0;
+    quiet = 0; quietT = null;
     activeT = t;
     state = MOTION;
     if (suppressed) {
@@ -58,20 +58,23 @@ export function createDetector(config) {
     if (state === IDLE) {
       if (rearm) {
         if (neutral) return events;
-        quiet = ratio < config.endRatio ? quiet + 1 : 0;
-        if (quiet >= config.endHoldFrames) { rearm = false; quiet = 0; }
+        if (ratio >= config.endRatio) quietT = null;
+        else {
+          if (quietT === null) quietT = t;
+          if (t - quietT >= config.endHoldMs) { rearm = false; quietT = null; }
+        }
         return events;
       }
       if (neutral || ratio < config.startRatio) return events;
       firstT = t; candFrames = 1; candPeakT = t; candPeak = ratio;
       state = CANDIDATE;
-      if (candFrames >= config.minMotionFrames) confirm(t, events);
+      if (t - firstT >= config.minMotionMs) confirm(t, events);
     } else if (state === CANDIDATE) {
       if (neutral) return events;
       if (ratio < config.startRatio) { state = IDLE; return events; }
       candFrames++;
       if (ratio > candPeak) { candPeak = ratio; candPeakT = t; }
-      if (candFrames >= config.minMotionFrames) confirm(t, events);
+      if (t - firstT >= config.minMotionMs) confirm(t, events);
     } else {
       // MOTION: maxMotionMs runs on t, so neutral frames count toward it
       if (t - pass.startT > config.maxMotionMs) {
@@ -83,14 +86,16 @@ export function createDetector(config) {
         state = IDLE;
         pass = null;
         rearm = true;
-        quiet = 0;
+        quiet = 0; quietT = null;
         return events;
       }
       if (neutral) return events;
       pass.frames++;
       if (ratio > pass.peakRatio) { pass.peakRatio = ratio; pass.peakT = t; }
-      if (ratio >= config.endRatio) { quiet = 0; activeT = t; return events; }
-      if (++quiet < config.endHoldFrames) return events;
+      if (ratio >= config.endRatio) { quiet = 0; quietT = null; activeT = t; return events; }
+      quiet++;
+      if (quietT === null) quietT = t;
+      if (t - quietT < config.endHoldMs) return events;
       // the pass ended at its last active frame; the quiet frames don't belong to it
       if (!suppressed) {
         events.push({

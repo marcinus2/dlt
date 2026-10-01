@@ -25,8 +25,8 @@ export const config = {
   // detector
   startRatio: 0.02,            // ROI fraction to start motion
   endRatio: 0.01,              // ROI fraction below which motion may end (hysteresis)
-  minMotionFrames: 2,          // consecutive frames to confirm a start
-  endHoldFrames: 3,            // consecutive quiet frames to confirm an end
+  minMotionMs: 30,             // motion must last this long (first to latest frame) to confirm a start; 0 = one frame
+  endHoldMs: 60,               // quiet for this long (first to latest quiet frame) to confirm an end
   cooldownMs: 1500,            // min gap between accepted STARTs
   maxMotionMs: 3000,           // longer motion = rejected (not a drone pass)
   warmupMs: 1500,              // ignore after start (auto-exposure settling)

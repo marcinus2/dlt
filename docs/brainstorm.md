@@ -100,11 +100,11 @@ Input: `update({ t, ratio, global })` → array of events. Rules:
 
 - **WARMUP:** ignore everything for `warmupMs` after start/reset.
 - **IDLE → CANDIDATE:** `ratio ≥ startRatio` and not `global`. Remember `firstT`.
-- **CANDIDATE → MOTION:** `minMotionFrames` frames in a row with `ratio ≥ startRatio`. Otherwise go back to IDLE.
+- **CANDIDATE → MOTION:** motion lasting `minMotionMs` (frames in a row with `ratio ≥ startRatio`). Otherwise go back to IDLE.
   - Emit `MOTION_START` with **`t = firstT` (backdated)**, not the moment it was confirmed.
   - If within `cooldownMs` of the last **accepted START** → emit `SUPPRESSED` instead and still track the pass to its end (so it can't re-trigger).
 - **MOTION:** track `peakRatio`, `peakT`, `frames`.
-  - **Hysteresis + end debounce:** end only after `endHoldFrames` frames in a row with `ratio < endRatio` → emit `MOTION_END { startT, endT, durationMs, peakT, peakRatio, frames }`.
+  - **Hysteresis + end debounce:** end only after `endHoldMs` of frames in a row with `ratio < endRatio` → emit `MOTION_END { startT, endT, durationMs, peakT, peakRatio, frames }`.
   - If duration > `maxMotionMs` → emit `REJECTED (LONG_MOTION)` → IDLE.
 - `global` frames are **neutral**: they don't start motion, don't count toward end-hold, and don't update the peak.
 - Keep a pass record so a lap is easy to add later. On each accepted START, log `Δstart = startT − prevStartT`; on END, also log `Δpeak = peakT − prevPeakT`. (Which one makes the better lap timestamp is decided from Phase 3 data.)
@@ -120,8 +120,8 @@ export const config = {
   // detector
   startRatio: 0.02,            // ROI fraction to start motion
   endRatio: 0.01,              // ROI fraction below which motion may end (hysteresis)
-  minMotionFrames: 2,          // consecutive frames to confirm a start
-  endHoldFrames: 3,            // consecutive quiet frames to confirm an end
+  minMotionMs: 30,             // motion must last this long to confirm a start
+  endHoldMs: 60,               // quiet for this long to confirm an end
   cooldownMs: 1500,            // min gap between accepted STARTs
   maxMotionMs: 3000,           // longer motion = rejected (not a drone pass)
   warmupMs: 1500,              // ignore after start (auto-exposure settling)

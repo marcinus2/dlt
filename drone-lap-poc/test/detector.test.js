@@ -205,3 +205,60 @@ test('reset clears previous pass times: no cooldown or Δ across a time-base jum
   assert.equal(events[0].dStart, null);
   assert.equal(events[1].dPeak, null);
 });
+
+// --- time-based debounce (minMotionMs / endHoldMs) ---
+
+// [[ratio, ms], ...] -> samples at `fps`
+function seqMs(segments, fps) {
+  const out = [];
+  let from = 0;
+  for (const [ratio, ms] of segments) {
+    const end = from + ms;
+    for (let k = Math.ceil((from * fps) / 1000); (k * 1000) / fps < end; k++) out.push({ t: (k * 1000) / fps, ratio, global: false });
+    from = end;
+  }
+  return out;
+}
+
+test('same physical pass -> same events at 10, 20, 30 and 60 fps', () => {
+  for (const fps of [10, 20, 30, 60]) {
+    const { events, types } = run(seqMs([[LO, 300], [HI, 300], [LO, 300]], fps));
+    assert.deepEqual(types, ['MOTION_START', 'MOTION_END'], `${fps} fps`);
+    const frame = 1000 / fps;
+    assert.ok(Math.abs(events[0].t - 300) < frame, `${fps} fps start`);
+    assert.ok(Math.abs(events[1].durationMs - 300) <= frame + 1e-6, `${fps} fps duration`);
+  }
+});
+
+test('start confirms once motion has lasted minMotionMs, not after N frames', () => {
+  const det = createDetector({ ...defaults, warmupMs: 0, minMotionMs: 30 });
+  const started = seq(rep(HI, 5), { fps: 100 }).map((s) => det.update(s).length);   // t = 0, 10, 20, 30, 40
+  assert.deepEqual(started, [0, 0, 0, 1, 0]);
+});
+
+test('minMotionMs 0 confirms on the first motion frame', () => {
+  const { events } = run(seq([LO, HI, LO, LO, LO]), { minMotionMs: 0 });
+  assert.deepEqual(events.map((e) => e.type), ['MOTION_START', 'MOTION_END']);
+  assert.equal(events[0].t, 100);
+});
+
+test('end confirms once quiet has lasted endHoldMs, not after N frames', () => {
+  const det = createDetector({ ...defaults, warmupMs: 0, endHoldMs: 60 });
+  const feed = seq([...rep(HI, 5), ...rep(LO, 10)], { fps: 100 });                   // quiet from t = 50
+  const ended = feed.map((s) => det.update(s).some((e) => e.type === 'MOTION_END'));
+  assert.deepEqual(ended.indexOf(true), 11);                                          // t = 110 = 50 + endHoldMs
+});
+
+test('a single quiet frame never ends a pass, however sparse the frames', () => {
+  const { types, det } = run(seq([HI, HI, HI, LO], { fps: 2 }));
+  assert.deepEqual(types, ['MOTION_START']);
+  assert.equal(det.state, MOTION);
+});
+
+test('re-arm after a long motion needs endHoldMs of quiet', () => {
+  const long = seq([...rep(HI, 40), LO], { fps: 10 });                                // one quiet frame at t = 4000
+  const tooSoon = seq([HI, HI, HI, LO, LO, LO], { fps: 100, t0: 4010 });              // only 20 ms of quiet at the end
+  assert.deepEqual(run([...long, ...tooSoon]).types, ['MOTION_START', 'REJECTED']);
+  const quiet = seq([...rep(HI, 40), LO, LO, HI, HI, HI, LO, LO, LO], { fps: 10 });   // 100 ms of quiet, then a real pass
+  assert.deepEqual(run(quiet).types, ['MOTION_START', 'REJECTED', 'MOTION_START', 'MOTION_END']);
+});
