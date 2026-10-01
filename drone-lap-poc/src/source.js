@@ -6,7 +6,7 @@ export async function listCameras() {
 }
 
 // createSource(video, config) -> { startCamera, startFile, stopCamera, onFrame, settings }
-// onFrame(cb): cb({ t, mediaTime, dropped, gapReset, seeked, tSource })
+// onFrame(cb): cb({ t, mediaTime, dropped, presented, gapReset, seeked, tSource })
 // Files use mediaTime * 1000 as t (not wall clock) and loop; a seek/loop sets seeked + gapReset.
 export function createSource(video, config) {
   let stream = null, objectUrl = null, isFile = false;
@@ -73,7 +73,7 @@ export function createSource(video, config) {
     }
     const gapReset = seeked || (lastT !== null && t - lastT > config.resetGapMs);
     lastT = t;
-    cb({ t, mediaTime, dropped, gapReset, seeked, tSource: isFile ? 'mediaTime' : useCapture ? 'captureTime' : 'now' });
+    cb({ t, mediaTime, dropped, presented: hasMeta ? meta.presentedFrames ?? null : null, gapReset, seeked, tSource: isFile ? 'mediaTime' : useCapture ? 'captureTime' : 'now' });
   }
 
   function loopRvfc(now, meta) {

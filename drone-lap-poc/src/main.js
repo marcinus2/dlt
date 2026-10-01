@@ -84,8 +84,22 @@ function setDetecting(on) {
   }
 }
 
+// Diagnostics: camera-delivered rate (presentedFrames) vs processed rate, and per-stage ms (EMA).
+const ms = { total: 0, preview: 0 };
+let presLast = null, presMark = null, camFps = null, statsMark = performance.now();
+const ema = (cur, v) => cur * 0.9 + v * 0.1;
+
 function onFrame(frame) {
+  const t0 = performance.now();
+  if (frame.presented != null) presLast = frame.presented;
+  handleFrame(frame);
+  ms.total = ema(ms.total, performance.now() - t0);
+}
+
+function handleFrame(frame) {
+  const tp = performance.now();
   drawPreview();
+  ms.preview = ema(ms.preview, performance.now() - tp);
   if (!detecting && !calib) return;
   if (frame.gapReset) motion.reset();
   if (frame.seeked) detector.reset(frame.t);   // file loop / seek
@@ -184,12 +198,17 @@ setInterval(() => {
   fps = (fpsCount * 1000) / (now - fpsStart);
   fpsCount = 0; fpsStart = now;
   const pct = (v) => `${(v * 100).toFixed(2)}%`;
+  if (presLast !== null && presMark !== null) camFps = Math.max(0, presLast - presMark) * 1000 / (now - statsMark);
+  presMark = presLast; statsMark = now;
   const cam = source.settings();
+  const { roi, diff, guard } = motion.timing;
   $('stats').textContent = [
     `state     ${detecting ? detector.state : 'OFF'}`,
     `ratio     ${pct(last.ratio)}   global ${pct(last.globalRatio)}${last.global ? ' (flagged)' : ''}`,
     `start/end ${pct(config.startRatio)} / ${pct(config.endRatio)}${calib ? '   (calibrating)' : ''}`,
     `fps       ${detecting ? fps.toFixed(1) : '-'}   dropped ${dropped}`,
+    `delivered ${camFps === null ? '-' : camFps.toFixed(1)} fps (camera)`,
+    `ms/frame  total ${ms.total.toFixed(1)}  preview ${ms.preview.toFixed(1)}  roi ${roi.toFixed(1)}  diff ${diff.toFixed(1)}  guard ${guard.toFixed(1)}`,
     `camera    ${cam ? `${cam.width}x${cam.height} @ ${cam.frameRate}` : '-'}   t: ${tSource}`,
     `passes    ${passes}`,
     `last pass ${lastPass ? `${Math.round(lastPass.durationMs)} ms, peak ${pct(lastPass.peakRatio)}, ${lastPass.frames} frames` : '-'}`,

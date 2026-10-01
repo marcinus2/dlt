@@ -50,6 +50,7 @@ export function createMotion(config) {
   let gCur = new Uint8Array(gSize), gPrev = new Uint8Array(gSize);
   let gMeanCur = 0, gMeanPrev = 0, gHasPrev = false;
   let diffShown = true;
+  const timing = { roi: 0, diff: 0, guard: 0 };   // ms of the last frame, overwritten in place
   const exclude = new Uint8Array(gSize);
   let excluded = 0;
 
@@ -75,6 +76,7 @@ export function createMotion(config) {
   }
 
   function process(video, roi) {
+    const t0 = performance.now();
     if (hint !== config.readbackHint) {      // canvas context attributes are fixed at creation: recreate
       hint = config.readbackHint;
       ctx = makeCtx(1, 1); gctx = makeCtx(GUARD_W, GUARD_H);
@@ -107,6 +109,7 @@ export function createMotion(config) {
     // ROI crop at full resolution. getImageData itself allocates; there is no read-into API.
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
     meanCur = toLuma(ctx.getImageData(0, 0, w, h).data, cur);
+    const t1 = performance.now();
     let ratio = 0;
     const valid = hasPrev;
     if (hasPrev) {
@@ -116,6 +119,7 @@ export function createMotion(config) {
     }
     if (!config.showDisplay && diffShown) dctx.clearRect(0, 0, diffCanvas.width, diffCanvas.height);
     diffShown = config.showDisplay;
+    const t2 = performance.now();
     [cur, prev] = [prev, cur];           // swap, don't copy
     meanPrev = meanCur;
     hasPrev = true;
@@ -135,8 +139,9 @@ export function createMotion(config) {
       gMeanPrev = gMeanCur;
       gHasPrev = true;
     }
+    timing.roi = t1 - t0; timing.diff = t2 - t1; timing.guard = performance.now() - t2;
     return { ratio, globalRatio, global };
   }
 
-  return { process, reset, diffCanvas };
+  return { process, reset, diffCanvas, timing };
 }
