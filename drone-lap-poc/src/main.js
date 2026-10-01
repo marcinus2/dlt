@@ -41,6 +41,7 @@ $('startCamera').onclick = async () => {
   $('message').textContent = '';
   try {
     await source.startCamera($('camera').value || undefined);
+    expKey = null;                             // re-apply exposure to the new stream
     await fillCameras();                       // labels are empty until permission is granted
     const s = source.settings();
     $('message').textContent = '';
@@ -192,8 +193,21 @@ function drawPreview() {
   pctx.strokeRect(rx, ry, rw, rh);
 }
 
+// --- exposure: applied when the config changes (and after Start Camera) ---
+let expKey = null;
+async function syncExposure() {
+  const key = `${config.exposureManual}|${config.exposureTime}`;
+  if (key === expKey) return;
+  const first = expKey === null;
+  expKey = key;
+  if (first && !config.exposureManual) return;     // leave the camera's auto exposure alone
+  const report = await source.applyExposure();
+  if (report === null) expKey = null; else log('camera', report);
+}
+
 // --- stats (text only, ~4 Hz) ---
 setInterval(() => {
+  syncExposure();
   const now = performance.now();
   fps = (fpsCount * 1000) / (now - fpsStart);
   fpsCount = 0; fpsStart = now;

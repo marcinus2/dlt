@@ -8,6 +8,8 @@ export const config = {
   // camera (applied on Start Camera)
   cameraWidth: 640,            // requested; readback cost scales with frame size
   cameraHeight: 360,
+  exposureManual: false,       // lock exposure (Android Chrome); a short time keeps the camera at full fps
+  exposureTime: 50,            // units of 100 µs (50 = 5 ms ≈ 1/200 s), clamped to the camera's range
   // motion
   processingMaxSize: 320,      // longest side of the processed ROI (px)
   pixelDiffThreshold: 25,      // min luma change per pixel

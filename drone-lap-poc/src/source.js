@@ -5,7 +5,7 @@ export async function listCameras() {
   return devices.filter((d) => d.kind === 'videoinput').map((d) => ({ deviceId: d.deviceId, label: d.label }));
 }
 
-// createSource(video, config) -> { startCamera, startFile, stopCamera, onFrame, settings }
+// createSource(video, config) -> { startCamera, startFile, stopCamera, onFrame, settings, applyExposure }
 // onFrame(cb): cb({ t, mediaTime, dropped, presented, gapReset, seeked, tSource })
 // Files use mediaTime * 1000 as t (not wall clock) and loop; a seek/loop sets seeked + gapReset.
 export function createSource(video, config) {
@@ -53,6 +53,24 @@ export function createSource(video, config) {
     stream = null;
     video.srcObject = null;
     clearFile();
+  }
+
+  // Manual exposure via track constraints. Returns a one-line report, or null without a camera stream.
+  async function applyExposure() {
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return null;
+    const caps = track.getCapabilities?.() ?? {};
+    if (!caps.exposureMode) return 'EXPOSURE       not supported by this camera/browser';
+    const range = caps.exposureTime;
+    const time = range ? Math.min(range.max, Math.max(range.min, config.exposureTime)) : config.exposureTime;
+    const advanced = config.exposureManual ? { exposureMode: 'manual', exposureTime: time } : { exposureMode: 'continuous' };
+    try {
+      await track.applyConstraints({ advanced: [advanced] });
+    } catch (err) {
+      return `EXPOSURE       failed: ${err.message}`;
+    }
+    const s = track.getSettings();
+    return `EXPOSURE       ${s.exposureMode ?? '?'} time ${s.exposureTime ?? '?'} (range ${range ? `${range.min}-${range.max}` : '?'})`;
   }
 
   function settings() {
@@ -110,5 +128,5 @@ export function createSource(video, config) {
     handle = null;
   }
 
-  return { startCamera, startFile, stopCamera, onFrame, settings };
+  return { startCamera, startFile, stopCamera, onFrame, settings, applyExposure };
 }
