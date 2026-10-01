@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { createDetector } from './detector.js';
+import { calibrate } from './calibration.js';
 import { createMotion } from './motion.js';
 import { createSource, listCameras } from './source.js';
 
@@ -12,7 +13,8 @@ $('diff').append(motion.diffCanvas);
 
 let detecting = false;
 let last = { ratio: 0, globalRatio: 0, global: false };
-let flagged = false;                           // global guard tripped (not just a missing previous frame)
+let flagged = false;
+let calib = null;                              // { samples: [], endT } while calibrating                           // global guard tripped (not just a missing previous frame)
 let passes = 0, lastPass = null, dropped = 0, tSource = '-';
 let fpsCount = 0, fpsStart = performance.now(), fps = 0;
 
@@ -30,7 +32,7 @@ $('startCamera').onclick = async () => {
     await fillCameras();                       // labels are empty until permission is granted
     const s = source.settings();
     $('message').textContent = '';
-    $('startDetection').disabled = false;
+    $('startDetection').disabled = $('calibrate').disabled = false;
     log('camera', `CAMERA         ${s.width}x${s.height} @ ${s.frameRate} fps`);
     source.onFrame(onFrame);
   } catch (err) {
@@ -44,7 +46,7 @@ $('videoFile').onchange = async (e) => {
   $('message').textContent = '';
   try {
     const s = await source.startFile(file);
-    $('startDetection').disabled = false;
+    $('startDetection').disabled = $('calibrate').disabled = false;
     setDetecting(false);
     log('camera', `FILE           ${file.name} ${s.width}x${s.height}`);
     source.onFrame(onFrame);
@@ -58,6 +60,7 @@ $('startDetection').onclick = () => setDetecting(true);
 $('stopDetection').onclick = () => setDetecting(false);
 
 function setDetecting(on) {
+  if (on && calib) { calib = null; $('calibrate').disabled = false; $('message').textContent = ''; }
   detecting = on;
   $('startDetection').disabled = on;
   $('stopDetection').disabled = !on;
@@ -70,7 +73,7 @@ function setDetecting(on) {
 
 function onFrame(frame) {
   drawPreview();
-  if (!detecting) return;
+  if (!detecting && !calib) return;
   if (frame.gapReset) motion.reset();
   if (frame.seeked) detector.reset(frame.t);   // file loop / seek
   const m = motion.process(video, config.roi);
@@ -81,8 +84,35 @@ function onFrame(frame) {
   dropped += frame.dropped;
   tSource = frame.tSource;
   fpsCount++;
+  if (calib) { collectCalibration(m, frame.t); return; }
   const events = detector.update({ t: frame.t, ratio: m.ratio, global: m.global, gapReset: frame.gapReset });
   for (const e of events) onEvent(e);
+}
+
+// --- calibration: sample the idle scene, then set start/end thresholds ---
+$('calibrate').onclick = () => {
+  setDetecting(false);
+  motion.reset();
+  calib = { samples: [], endT: null };
+  $('calibrate').disabled = true;
+  $('message').textContent = 'Calibrating: keep the scene static…';
+};
+
+function collectCalibration(m, t) {
+  if (calib.endT === null) calib.endT = t + config.calibrationMs;
+  if (!m.global) calib.samples.push(m.ratio);      // global frames are excluded
+  if (t < calib.endT) return;
+  const c = calibrate(calib.samples, config.calibrationK);
+  calib = null;
+  $('calibrate').disabled = false;
+  if (!c) { $('message').textContent = 'Calibration failed: no usable frames'; return; }
+  $('message').textContent = '';
+  config.startRatio = c.startRatio;
+  config.endRatio = c.endRatio;
+  syncInputs();
+  const pct = (v) => `${(v * 100).toFixed(3)}%`;
+  log('calib', `CALIBRATION    n ${c.n}  mean ${pct(c.mean)}  σ ${pct(c.sigma)}  max ${pct(c.max)}  -> start ${pct(c.startRatio)}  end ${pct(c.endRatio)}`);
+  if (c.hint) log('rejected', `CALIBRATION    ${c.hint}`);
 }
 
 function onEvent(e) {
@@ -134,7 +164,7 @@ setInterval(() => {
   $('stats').textContent = [
     `state     ${detecting ? detector.state : 'OFF'}`,
     `ratio     ${pct(last.ratio)}   global ${pct(last.globalRatio)}${last.global ? ' (flagged)' : ''}`,
-    `start/end ${pct(config.startRatio)} / ${pct(config.endRatio)}`,
+    `start/end ${pct(config.startRatio)} / ${pct(config.endRatio)}${calib ? '   (calibrating)' : ''}`,
     `fps       ${detecting ? fps.toFixed(1) : '-'}   dropped ${dropped}`,
     `camera    ${cam ? `${cam.width}x${cam.height} @ ${cam.frameRate}` : '-'}   t: ${tSource}`,
     `passes    ${passes}`,
@@ -158,6 +188,14 @@ function log(cls, text) {
 $('clearLog').onclick = () => logEl.replaceChildren();
 
 // --- inputs generated from config, applied live ---
+const inputs = [];                             // { obj, key, input }, for syncInputs()
+function syncInputs() {
+  for (const { obj, key, input } of inputs) {
+    if (input.type === 'checkbox') input.checked = obj[key];
+    else input.value = obj[key];
+  }
+}
+
 function addInput(parent, obj, key, opts = {}) {
   const label = document.createElement('label');
   label.textContent = key;
@@ -179,6 +217,7 @@ function addInput(parent, obj, key, opts = {}) {
   }
   label.append(input);
   parent.append(label);
+  inputs.push({ obj, key, input });
 }
 
 for (const key of Object.keys(config)) {
