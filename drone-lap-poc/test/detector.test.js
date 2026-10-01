@@ -194,3 +194,14 @@ test('after a long motion the detector re-arms only after quiet frames', () => {
   const tail = seq([...rep(HI, 32), LO, HI, HI, HI, HI, LO, LO, LO, LO]);
   assert.deepEqual(run(tail).types, ['MOTION_START', 'REJECTED']);
 });
+
+test('reset clears previous pass times: no cooldown or Δ across a time-base jump (file loop)', () => {
+  const det = createDetector({ ...defaults, warmupMs: 0 });
+  const feed = (samples) => samples.flatMap((x) => det.update(x));
+  feed(seq([HI, HI, HI, LO, LO, LO], { t0: 40000 }));
+  det.reset(0);                                     // loop: mediaTime back to 0
+  const events = feed(seq([HI, HI, HI, LO, LO, LO], { t0: 0 }));
+  assert.deepEqual(events.map((e) => e.type), ['MOTION_START', 'MOTION_END']);
+  assert.equal(events[0].dStart, null);
+  assert.equal(events[1].dPeak, null);
+});

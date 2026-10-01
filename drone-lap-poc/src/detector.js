@@ -23,6 +23,7 @@ export function createDetector(config) {
     suppressed = false;
     quiet = 0;
     rearm = false;
+    lastStartT = lastPeakT = null;   // the time base may have jumped (file loop/seek): old times are meaningless
   }
 
   // CANDIDATE confirmed: start the pass record, or suppress it inside the cooldown.

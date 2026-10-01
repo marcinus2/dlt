@@ -61,7 +61,7 @@ These are decided here so the tests can be written. Each one gets a test:
 - **After REJECTED** (and after a suppressed pass is dropped at `maxMotionMs`): IDLE, but re-armed only after `endHoldFrames` consecutive quiet frames (`ratio < endRatio`; global/gap frames are neutral). Otherwise motion that outlasts `maxMotionMs` would immediately start a new pass, giving a START/REJECTED pair every `maxMotionMs`.
 - **`gapReset` frame:** treated as global/neutral (no diff available).
 - **`maxMotionMs`** is measured on `t`, so global frames inside a pass still count toward it.
-- `reset(t)` puts the detector back in WARMUP until `t + warmupMs`. It's called on start detection, source change and seek.
+- `reset(t)` puts the detector back in WARMUP until `t + warmupMs`. It also clears the previous start/peak times (cooldown, Δstart, Δpeak), because a seek or file loop jumps the time base. It's called on start detection, source change and seek.
 
 ## 6. Risks to watch during the build
 - `metadata.captureTime` is missing on Safari and on file sources. Fall back as described, and show the timestamp source in stats.
