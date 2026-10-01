@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { createDetector } from './detector.js';
 import { calibrate } from './calibration.js';
+import { createGraph } from './graph.js';
 import { createMotion } from './motion.js';
 import { createSource, listCameras } from './source.js';
 
@@ -9,6 +10,7 @@ const video = $('video'), preview = $('preview'), pctx = preview.getContext('2d'
 const source = createSource(video, config);
 const motion = createMotion(config, { globalGuard: true });
 const detector = createDetector(config);
+const graph = createGraph($('graph'), config);
 $('diff').append(motion.diffCanvas);
 
 let detecting = false;
@@ -84,9 +86,10 @@ function onFrame(frame) {
   dropped += frame.dropped;
   tSource = frame.tSource;
   fpsCount++;
-  if (calib) { collectCalibration(m, frame.t); return; }
+  if (calib) { graph.push(m.ratio, m.global, false); collectCalibration(m, frame.t); return; }
   const events = detector.update({ t: frame.t, ratio: m.ratio, global: m.global, gapReset: frame.gapReset });
   for (const e of events) onEvent(e);
+  graph.push(m.ratio, m.global, detector.state === 'MOTION');
 }
 
 // --- calibration: sample the idle scene, then set start/end thresholds ---
