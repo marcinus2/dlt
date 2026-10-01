@@ -5,13 +5,22 @@ export async function listCameras() {
   return devices.filter((d) => d.kind === 'videoinput').map((d) => ({ deviceId: d.deviceId, label: d.label }));
 }
 
-// createSource(video, config) -> { startCamera, stopCamera, onFrame, settings }
-// onFrame(cb): cb({ t, mediaTime, dropped, gapReset, tSource })
+// createSource(video, config) -> { startCamera, startFile, stopCamera, onFrame, settings }
+// onFrame(cb): cb({ t, mediaTime, dropped, gapReset, seeked, tSource })
+// Files use mediaTime * 1000 as t (not wall clock) and loop; a seek/loop sets seeked + gapReset.
 export function createSource(video, config) {
-  let stream = null;
+  let stream = null, objectUrl = null, isFile = false;
   let cb = null;
   let handle = null;
   let lastT = null, lastPresented = null, lastTime = -1;
+
+  function clearFile() {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = null;
+    isFile = false;
+    video.loop = false;
+    video.removeAttribute('src');
+  }
 
   async function startCamera(deviceId) {
     stopCamera();
@@ -27,29 +36,44 @@ export function createSource(video, config) {
     return settings();
   }
 
+  async function startFile(file) {
+    stopCamera();
+    objectUrl = URL.createObjectURL(file);
+    isFile = true;
+    video.loop = true;
+    video.src = objectUrl;
+    await video.play();
+    lastT = lastPresented = null;
+    lastTime = -1;
+    return settings();
+  }
+
   function stopCamera() {
     if (stream) stream.getTracks().forEach((tr) => tr.stop());
     stream = null;
     video.srcObject = null;
+    clearFile();
   }
 
-  const settings = () => (stream ? stream.getVideoTracks()[0].getSettings() : null);
+  function settings() {
+    if (stream) return stream.getVideoTracks()[0].getSettings();
+    return isFile ? { width: video.videoWidth, height: video.videoHeight, frameRate: 'file' } : null;
+  }
 
   function emit(now, meta) {
     const hasMeta = !!meta;
-    const t = hasMeta && meta.captureTime != null ? meta.captureTime : now;
+    const mediaTime = hasMeta ? meta.mediaTime : video.currentTime;
+    const useCapture = !isFile && hasMeta && meta.captureTime != null;
+    const t = isFile ? mediaTime * 1000 : useCapture ? meta.captureTime : now;
+    const seeked = lastT !== null && t < lastT;
     let dropped = 0;
     if (hasMeta && meta.presentedFrames != null) {
-      if (lastPresented !== null) dropped = Math.max(0, meta.presentedFrames - lastPresented - 1);
+      if (lastPresented !== null && !seeked) dropped = Math.max(0, meta.presentedFrames - lastPresented - 1);
       lastPresented = meta.presentedFrames;
     }
-    const gapReset = lastT !== null && t - lastT > config.resetGapMs;
+    const gapReset = seeked || (lastT !== null && t - lastT > config.resetGapMs);
     lastT = t;
-    cb({
-      t, dropped, gapReset,
-      mediaTime: hasMeta ? meta.mediaTime : video.currentTime,
-      tSource: hasMeta && meta.captureTime != null ? 'captureTime' : 'now',
-    });
+    cb({ t, mediaTime, dropped, gapReset, seeked, tSource: isFile ? 'mediaTime' : useCapture ? 'captureTime' : 'now' });
   }
 
   function loopRvfc(now, meta) {
@@ -86,5 +110,5 @@ export function createSource(video, config) {
     handle = null;
   }
 
-  return { startCamera, stopCamera, onFrame, settings };
+  return { startCamera, startFile, stopCamera, onFrame, settings };
 }

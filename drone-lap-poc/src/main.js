@@ -37,6 +37,21 @@ $('startCamera').onclick = async () => {
   }
 };
 
+$('videoFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('message').textContent = '';
+  try {
+    const s = await source.startFile(file);
+    $('startDetection').disabled = false;
+    setDetecting(false);
+    log('camera', `FILE           ${file.name} ${s.width}x${s.height}`);
+    source.onFrame(onFrame);
+  } catch (err) {
+    $('message').textContent = `File error: ${err.message}`;
+  }
+};
+
 // --- detection ---
 $('startDetection').onclick = () => setDetecting(true);
 $('stopDetection').onclick = () => setDetecting(false);
@@ -56,6 +71,7 @@ function onFrame(frame) {
   drawPreview();
   if (!detecting) return;
   if (frame.gapReset) motion.reset();
+  if (frame.seeked) detector.reset(frame.t);   // file loop / seek
   const m = motion.process(video, config.roi);
   last = m;
   dropped += frame.dropped;
