@@ -40,7 +40,7 @@ const GUARD_W = 80, GUARD_H = 60;
 // Frames with no previous frame to diff against (first / after reset() / ROI change) come back
 // global: true, i.e. neutral for the detector. config.globalGuard / config.showDisplay are read per frame.
 export function createMotion(config) {
-  const ctx = makeCtx(1, 1), gctx = makeCtx(GUARD_W, GUARD_H);
+  let ctx = null, gctx = null, hint = null;
   const diffCanvas = document.createElement('canvas');
   const dctx = diffCanvas.getContext('2d');
   let cur = null, prev = null, meanCur = 0, meanPrev = 0, hasPrev = false;
@@ -56,7 +56,7 @@ export function createMotion(config) {
   function makeCtx(w, h) {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
-    return c.getContext('2d', { willReadFrequently: true });
+    return c.getContext('2d', { willReadFrequently: config.readbackHint });
   }
 
   function reset() { hasPrev = false; gHasPrev = false; }
@@ -75,6 +75,11 @@ export function createMotion(config) {
   }
 
   function process(video, roi) {
+    if (hint !== config.readbackHint) {      // canvas context attributes are fixed at creation: recreate
+      hint = config.readbackHint;
+      ctx = makeCtx(1, 1); gctx = makeCtx(GUARD_W, GUARD_H);
+      pw = ph = 0; hasPrev = gHasPrev = false;
+    }
     const vw = video.videoWidth, vh = video.videoHeight;
     const sx = Math.min(vw - 1, Math.max(0, Math.round(roi.x * vw)));
     const sy = Math.min(vh - 1, Math.max(0, Math.round(roi.y * vh)));
