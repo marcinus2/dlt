@@ -5,6 +5,9 @@ export const roiPresets = {           // relative 0–1
 };
 
 export const config = {
+  // camera (applied on Start Camera)
+  cameraWidth: 640,            // requested; readback cost scales with frame size
+  cameraHeight: 360,
   // motion
   processingMaxSize: 320,      // longest side of the processed ROI (px)
   pixelDiffThreshold: 25,      // min luma change per pixel

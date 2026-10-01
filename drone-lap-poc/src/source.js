@@ -27,7 +27,7 @@ export function createSource(video, config) {
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-        width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 },
+        width: { ideal: config.cameraWidth }, height: { ideal: config.cameraHeight }, frameRate: { ideal: 60 },
       },
     });
     video.srcObject = stream;
