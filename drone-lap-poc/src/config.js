@@ -19,7 +19,7 @@ export const config = {
   pixelDiffThreshold: 10,      // min luma change per pixel
   brightnessNormalize: false,  // cancel global brightness shift
   globalGuardRatio: 0.2,       // outside-ROI change fraction that flags a frame as global
-  globalGuard: true,           // full-frame guard; costs a second video readback per frame
+  globalGuard: false,          // full-frame guard; costs a second video readback per frame
   showDisplay: true,           // preview, diff view and graph; off = less CPU
   readbackHint: true,          // willReadFrequently canvases (CPU); off = GPU canvas, may be faster on Android
   // detector

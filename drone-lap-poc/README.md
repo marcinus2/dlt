@@ -55,7 +55,7 @@ WARMUP ──warmupMs──▶ IDLE ──ratio ≥ start──▶ CANDIDATE ─
 | `exposureManual` / `exposureTime` | true / 100 | lock exposure at `exposureTime` × 100 µs so the camera holds its frame rate (Android Chrome) |
 | `focusLock` | false | freeze autofocus at its current distance |
 | `cameraFps` / `fpsExact` | 30 / false | requested frame rate; `fpsExact` fails instead of falling back |
-| `globalGuard` | true | full-frame guard (a second video readback per frame) |
+| `globalGuard` | false | full-frame guard (a second video readback per frame) |
 | `showDisplay` | true | preview, diff view and graph; off = less CPU |
 | `readbackHint` | true | CPU-backed (`willReadFrequently`) readback canvases; off = GPU canvases |
 | `processingMaxSize` | 320 | longest side of the processed ROI (px) |
