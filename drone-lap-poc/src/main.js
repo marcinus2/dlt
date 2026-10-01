@@ -7,6 +7,7 @@ import { createRecorder } from './recorder.js';
 import { loadSettings, saveSettings, clearSettings } from './storage.js';
 import { createMotion } from './motion.js';
 import { createSource, listCameras } from './source.js';
+import { registerServiceWorker } from './pwa.js';
 
 const defaults = structuredClone(config);
 loadSettings(config);
@@ -282,3 +283,4 @@ syncPresetSelect();
 $('roiInputs').oninput = () => { $('roiPreset').value = 'custom'; };
 
 fillCameras().catch(() => {});
+registerServiceWorker();

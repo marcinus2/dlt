@@ -69,6 +69,9 @@ WARMUP ──warmupMs──▶ IDLE ──ratio ≥ start──▶ CANDIDATE ─
 
 Calibration: `startRatio = max(mean + k·σ, 1.2·max, 0.002)`, `endRatio = startRatio / 2`. The 0.002 floor stops a perfectly static scene (all zeros) from triggering on a single pixel. Global frames are excluded from the samples. If the idle mean is above 1%, raise `pixelDiffThreshold` or fix lighting first.
 
+## PWA
+`public/manifest.webmanifest` + `public/sw.js` (hand-written, no dependencies; network-first with cache fallback, registered in production builds only by `src/pwa.js`). Needs HTTPS: deploy `dist/` to a static host, open it in Android Chrome, then menu → Install app. After one online visit it opens offline. Bump `CACHE` in `sw.js` to drop old caches.
+
 ## Tests
 `npm test` runs `node --test` on `test/`: detector (state machine and the dev-plan §5 rules), motion core (luma, diff, normalisation, exclusion mask), calibration, recorder/CSV and storage. Canvas and camera glue is checked manually.
 
