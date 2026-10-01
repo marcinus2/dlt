@@ -1,0 +1,171 @@
+import { config } from './config.js';
+import { createDetector } from './detector.js';
+import { createMotion } from './motion.js';
+import { createSource, listCameras } from './source.js';
+
+const $ = (id) => document.getElementById(id);
+const video = $('video'), preview = $('preview'), pctx = preview.getContext('2d');
+const source = createSource(video, config);
+const motion = createMotion(config);
+const detector = createDetector(config);
+$('diff').append(motion.diffCanvas);
+
+let detecting = false;
+let last = { ratio: 0, globalRatio: 0, global: false };
+let passes = 0, lastPass = null, dropped = 0, tSource = '-';
+let fpsCount = 0, fpsStart = performance.now(), fps = 0;
+
+// --- camera ---
+async function fillCameras() {
+  const select = $('camera'), current = select.value;
+  select.replaceChildren(...(await listCameras()).map((c, i) => new Option(c.label || `Camera ${i + 1}`, c.deviceId)));
+  if (current) select.value = current;
+}
+
+$('startCamera').onclick = async () => {
+  $('message').textContent = '';
+  try {
+    await source.startCamera($('camera').value || undefined);
+    await fillCameras();                       // labels are empty until permission is granted
+    const s = source.settings();
+    $('message').textContent = '';
+    $('startDetection').disabled = false;
+    log('camera', `CAMERA         ${s.width}x${s.height} @ ${s.frameRate} fps`);
+    source.onFrame(onFrame);
+  } catch (err) {
+    $('message').textContent = `Camera error: ${err.message}`;
+  }
+};
+
+// --- detection ---
+$('startDetection').onclick = () => setDetecting(true);
+$('stopDetection').onclick = () => setDetecting(false);
+
+function setDetecting(on) {
+  detecting = on;
+  $('startDetection').disabled = on;
+  $('stopDetection').disabled = !on;
+  if (on) {
+    motion.reset();
+    detector.reset();                          // warm-up starts at the first sample
+    passes = 0; lastPass = null; dropped = 0;
+  }
+}
+
+function onFrame(frame) {
+  drawPreview();
+  if (!detecting) return;
+  if (frame.gapReset) motion.reset();
+  const m = motion.process(video, config.roi);
+  last = m;
+  dropped += frame.dropped;
+  tSource = frame.tSource;
+  fpsCount++;
+  const events = detector.update({ t: frame.t, ratio: m.ratio, global: m.global, gapReset: frame.gapReset });
+  for (const e of events) onEvent(e);
+}
+
+function onEvent(e) {
+  const s = (ms) => (ms === null ? '-' : `${(ms / 1000).toFixed(3)} s`);
+  switch (e.type) {
+    case 'MOTION_START':
+      log('start', `MOTION START   Δstart ${s(e.dStart)}`);
+      break;
+    case 'MOTION_END':
+      passes++;
+      lastPass = e;
+      log('end', `MOTION END     dur ${Math.round(e.durationMs)} ms  peak ${(e.peakRatio * 100).toFixed(1)}%  frames ${e.frames}  Δpeak ${s(e.dPeak)}`);
+      break;
+    case 'SUPPRESSED':
+      log('suppressed', `SUPPRESSED     (${e.reason})`);
+      break;
+    case 'REJECTED':
+      log('rejected', `REJECTED       long motion ${(e.durationMs / 1000).toFixed(1)} s`);
+      break;
+  }
+}
+
+// --- preview with ROI overlay (outside area dimmed) ---
+function drawPreview() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw) return;
+  const h = Math.round((preview.width * vh) / vw);
+  if (preview.height !== h) preview.height = h;
+  const W = preview.width, H = preview.height;
+  pctx.drawImage(video, 0, 0, W, H);
+  const { x, y, width, height } = config.roi;
+  const rx = x * W, ry = y * H, rw = width * W, rh = height * H;
+  pctx.fillStyle = 'rgba(0,0,0,0.55)';
+  pctx.fillRect(0, 0, W, ry);
+  pctx.fillRect(0, ry + rh, W, H - ry - rh);
+  pctx.fillRect(0, ry, rx, rh);
+  pctx.fillRect(rx + rw, ry, W - rx - rw, rh);
+  pctx.strokeStyle = last.global && detecting ? '#f66' : '#6f6';
+  pctx.strokeRect(rx, ry, rw, rh);
+}
+
+// --- stats (text only, ~4 Hz) ---
+setInterval(() => {
+  const now = performance.now();
+  fps = (fpsCount * 1000) / (now - fpsStart);
+  fpsCount = 0; fpsStart = now;
+  const pct = (v) => `${(v * 100).toFixed(2)}%`;
+  const cam = source.settings();
+  $('stats').textContent = [
+    `state     ${detecting ? detector.state : 'OFF'}`,
+    `ratio     ${pct(last.ratio)}   global ${pct(last.globalRatio)}${last.global ? ' (flagged)' : ''}`,
+    `start/end ${pct(config.startRatio)} / ${pct(config.endRatio)}`,
+    `fps       ${detecting ? fps.toFixed(1) : '-'}   dropped ${dropped}`,
+    `camera    ${cam ? `${cam.width}x${cam.height} @ ${cam.frameRate}` : '-'}   t: ${tSource}`,
+    `passes    ${passes}`,
+    `last pass ${lastPass ? `${Math.round(lastPass.durationMs)} ms, peak ${pct(lastPass.peakRatio)}, ${lastPass.frames} frames` : '-'}`,
+  ].join('\n');
+}, 250);
+
+// --- event log ---
+const logEl = $('log');
+function log(cls, text) {
+  const d = new Date();
+  const ts = d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = `${ts}  ${text}`;
+  const pinned = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 4;
+  logEl.append(line);
+  if (logEl.childElementCount > 500) logEl.firstChild.remove();
+  if (pinned) logEl.scrollTop = logEl.scrollHeight;
+}
+$('clearLog').onclick = () => logEl.replaceChildren();
+
+// --- inputs generated from config, applied live ---
+function addInput(parent, obj, key, opts = {}) {
+  const label = document.createElement('label');
+  label.textContent = key;
+  const input = document.createElement('input');
+  if (typeof obj[key] === 'boolean') {
+    input.type = 'checkbox';
+    input.checked = obj[key];
+    input.onchange = () => { obj[key] = input.checked; };
+  } else {
+    input.type = 'number';
+    input.step = opts.step ?? 'any';
+    if (opts.min !== undefined) input.min = opts.min;
+    if (opts.max !== undefined) input.max = opts.max;
+    input.value = obj[key];
+    input.oninput = () => {
+      const v = parseFloat(input.value);
+      if (Number.isFinite(v)) obj[key] = v;
+    };
+  }
+  label.append(input);
+  parent.append(label);
+}
+
+for (const key of Object.keys(config)) {
+  if (typeof config[key] !== 'object') addInput($('configInputs'), config, key);
+}
+for (const key of ['x', 'y', 'width', 'height']) {
+  addInput($('roiInputs'), config.roi, key, { step: 0.01, min: 0, max: 1 });
+}
+
+fillCameras().catch(() => {});

@@ -7,6 +7,45 @@
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+  <header>
+    <label>Camera <select id="camera"></select></label>
+    <button id="startCamera">Start Camera</button>
+    <button id="startDetection" disabled>Start Detection</button>
+    <button id="stopDetection" disabled>Stop Detection</button>
+    <span id="message"></span>
+  </header>
+
+  <main>
+    <section class="views">
+      <figure>
+        <figcaption>Camera + ROI</figcaption>
+        <canvas id="preview" width="640" height="360"></canvas>
+      </figure>
+      <figure>
+        <figcaption>Diff (ROI)</figcaption>
+        <div id="diff"></div>
+      </figure>
+      <video id="video" playsinline muted hidden></video>
+    </section>
+
+    <section class="side">
+      <pre id="stats"></pre>
+      <details open>
+        <summary>ROI (relative 0–1)</summary>
+        <div id="roiInputs" class="inputs"></div>
+      </details>
+      <details open>
+        <summary>Config</summary>
+        <div id="configInputs" class="inputs"></div>
+      </details>
+    </section>
+
+    <section class="logs">
+      <div><button id="clearLog">Clear</button></div>
+      <div id="log"></div>
+    </section>
+  </main>
+
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

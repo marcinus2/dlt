@@ -1,1 +1,19 @@
-body { margin: 0; font-family: system-ui, sans-serif; }
+body { margin: 0; font-family: system-ui, sans-serif; font-size: 14px; background: #111; color: #ddd; }
+header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: #222; flex-wrap: wrap; }
+#message { color: #f88; }
+main { display: grid; grid-template-columns: auto 280px; gap: 12px; padding: 12px; align-items: start; }
+.views { display: flex; gap: 12px; flex-wrap: wrap; }
+figure { margin: 0; }
+figcaption { color: #888; margin-bottom: 4px; }
+canvas { background: #000; max-width: 100%; display: block; }
+#diff canvas { max-width: 320px; }
+.side pre { margin: 0 0 8px; font-size: 13px; line-height: 1.4; }
+.inputs { display: grid; grid-template-columns: 1fr 90px; gap: 4px 8px; padding: 6px 0; }
+.inputs input[type=number] { width: 90px; }
+.inputs input[type=checkbox] { justify-self: start; }
+.logs { grid-column: 1 / -1; }
+#log { font: 13px/1.4 ui-monospace, Menlo, monospace; height: 220px; overflow-y: auto; background: #000; padding: 6px; white-space: pre; }
+#log .start { color: #6f6; }
+#log .end { color: #6cf; }
+#log .suppressed { color: #fc6; }
+#log .rejected { color: #f66; }
