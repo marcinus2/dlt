@@ -5,7 +5,7 @@ export async function listCameras() {
   return devices.filter((d) => d.kind === 'videoinput').map((d) => ({ deviceId: d.deviceId, label: d.label }));
 }
 
-// createSource(video, config) -> { startCamera, startFile, stopCamera, onFrame, settings, applyExposure }
+// createSource(video, config) -> { startCamera, startFile, stopCamera, onFrame, settings, applyExposure, applyFocus }
 // onFrame(cb): cb({ t, mediaTime, dropped, presented, gapReset, seeked, tSource })
 // Files use mediaTime * 1000 as t (not wall clock) and loop; a seek/loop sets seeked + gapReset.
 export function createSource(video, config) {
@@ -27,7 +27,7 @@ export function createSource(video, config) {
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-        width: { ideal: config.cameraWidth }, height: { ideal: config.cameraHeight }, frameRate: { ideal: 60 },
+        width: { ideal: config.cameraWidth }, height: { ideal: config.cameraHeight }, frameRate: config.fpsExact ? { exact: config.cameraFps } : { ideal: config.cameraFps },
       },
     });
     video.srcObject = stream;
@@ -71,6 +71,24 @@ export function createSource(video, config) {
     }
     const s = track.getSettings();
     return `EXPOSURE       ${s.exposureMode ?? '?'} time ${s.exposureTime ?? '?'} (range ${range ? `${range.min}-${range.max}` : '?'})`;
+  }
+
+  // Freeze autofocus where it settled (focusDistance read back from the track), or release it.
+  async function applyFocus() {
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return null;
+    const caps = track.getCapabilities?.() ?? {};
+    if (!caps.focusMode) return 'FOCUS          not supported by this camera/browser';
+    const advanced = { focusMode: config.focusLock ? 'manual' : 'continuous' };
+    const range = caps.focusDistance, now = track.getSettings().focusDistance;
+    if (config.focusLock && now != null) advanced.focusDistance = range ? Math.min(range.max, Math.max(range.min, now)) : now;
+    try {
+      await track.applyConstraints({ advanced: [advanced] });
+    } catch (err) {
+      return `FOCUS          failed: ${err.message}`;
+    }
+    const s = track.getSettings();
+    return `FOCUS          ${s.focusMode ?? '?'} distance ${s.focusDistance ?? '?'}`;
   }
 
   function settings() {
@@ -128,5 +146,5 @@ export function createSource(video, config) {
     handle = null;
   }
 
-  return { startCamera, startFile, stopCamera, onFrame, settings, applyExposure };
+  return { startCamera, startFile, stopCamera, onFrame, settings, applyExposure, applyFocus };
 }

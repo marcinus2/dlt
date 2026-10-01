@@ -41,7 +41,7 @@ $('startCamera').onclick = async () => {
   $('message').textContent = '';
   try {
     await source.startCamera($('camera').value || undefined);
-    expKey = null;                             // re-apply exposure to the new stream
+    applied.exposure = applied.focus = null;   // re-apply to the new stream
     await fillCameras();                       // labels are empty until permission is granted
     const s = source.settings();
     $('message').textContent = '';
@@ -193,21 +193,21 @@ function drawPreview() {
   pctx.strokeRect(rx, ry, rw, rh);
 }
 
-// --- exposure: applied when the config changes (and after Start Camera) ---
-let expKey = null;
-async function syncExposure() {
-  const key = `${config.exposureManual}|${config.exposureTime}`;
-  if (key === expKey) return;
-  const first = expKey === null;
-  expKey = key;
-  if (first && !config.exposureManual) return;     // leave the camera's auto exposure alone
-  const report = await source.applyExposure();
-  if (report === null) expKey = null; else log('camera', report);
+// --- exposure / focus: applied when the config changes (and after Start Camera) ---
+const applied = { exposure: null, focus: null };
+async function syncControl(name, key, active, apply) {
+  if (key === applied[name]) return;
+  const first = applied[name] === null;
+  applied[name] = key;
+  if (first && !active) return;                    // leave the camera's auto mode alone
+  const report = await apply();
+  if (report === null) applied[name] = null; else log('camera', report);
 }
 
 // --- stats (text only, ~4 Hz) ---
 setInterval(() => {
-  syncExposure();
+  syncControl('exposure', `${config.exposureManual}|${config.exposureTime}`, config.exposureManual, source.applyExposure);
+  syncControl('focus', `${config.focusLock}`, config.focusLock, source.applyFocus);
   const now = performance.now();
   fps = (fpsCount * 1000) / (now - fpsStart);
   fpsCount = 0; fpsStart = now;

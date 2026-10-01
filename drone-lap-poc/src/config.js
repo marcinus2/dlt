@@ -10,6 +10,9 @@ export const config = {
   cameraHeight: 360,
   exposureManual: false,       // lock exposure (Android Chrome); a short time keeps the camera at full fps
   exposureTime: 50,            // units of 100 µs (50 = 5 ms ≈ 1/200 s), clamped to the camera's range
+  focusLock: false,            // freeze autofocus at its current distance (Android Chrome)
+  cameraFps: 60,               // requested frame rate (applied on Start Camera)
+  fpsExact: false,             // true = fail instead of falling back when the camera can't do cameraFps
   // motion
   processingMaxSize: 320,      // longest side of the processed ROI (px)
   pixelDiffThreshold: 25,      // min luma change per pixel
