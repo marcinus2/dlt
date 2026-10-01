@@ -10,6 +10,8 @@ export const config = {
   pixelDiffThreshold: 25,      // min luma change per pixel
   brightnessNormalize: true,   // cancel global brightness shift
   globalGuardRatio: 0.2,       // outside-ROI change fraction that flags a frame as global
+  globalGuard: true,           // full-frame guard; costs a second video readback per frame
+  showDisplay: true,           // preview, diff view and graph; off = less CPU
   // detector
   startRatio: 0.02,            // ROI fraction to start motion
   endRatio: 0.01,              // ROI fraction below which motion may end (hysteresis)

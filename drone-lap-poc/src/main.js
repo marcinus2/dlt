@@ -16,7 +16,7 @@ const persist = () => saveSettings(config);
 const $ = (id) => document.getElementById(id);
 const video = $('video'), preview = $('preview'), pctx = preview.getContext('2d');
 const source = createSource(video, config);
-const motion = createMotion(config, { globalGuard: true });
+const motion = createMotion(config);
 const detector = createDetector(config);
 const recorder = createRecorder();
 const beeper = createBeeper();
@@ -153,7 +153,14 @@ function onEvent(e) {
 }
 
 // --- preview with ROI overlay (outside area dimmed) ---
+let previewShown = true;
 function drawPreview() {
+  if (!config.showDisplay) {
+    if (previewShown) pctx.clearRect(0, 0, preview.width, preview.height);
+    previewShown = false;
+    return;
+  }
+  previewShown = true;
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw) return;
   const h = Math.round((preview.width * vh) / vw);

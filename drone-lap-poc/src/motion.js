@@ -38,8 +38,8 @@ const GUARD_W = 80, GUARD_H = 60;
 
 // process(video, roi) -> { ratio, globalRatio, global }. roi is relative 0–1.
 // Frames with no previous frame to diff against (first / after reset() / ROI change) come back
-// global: true, i.e. neutral for the detector. The global guard is off unless opts.globalGuard.
-export function createMotion(config, { globalGuard = false } = {}) {
+// global: true, i.e. neutral for the detector. config.globalGuard / config.showDisplay are read per frame.
+export function createMotion(config) {
   const ctx = makeCtx(1, 1), gctx = makeCtx(GUARD_W, GUARD_H);
   const diffCanvas = document.createElement('canvas');
   const dctx = diffCanvas.getContext('2d');
@@ -49,6 +49,7 @@ export function createMotion(config, { globalGuard = false } = {}) {
   const gSize = GUARD_W * GUARD_H;
   let gCur = new Uint8Array(gSize), gPrev = new Uint8Array(gSize);
   let gMeanCur = 0, gMeanPrev = 0, gHasPrev = false;
+  let diffShown = true;
   const exclude = new Uint8Array(gSize);
   let excluded = 0;
 
@@ -104,15 +105,19 @@ export function createMotion(config, { globalGuard = false } = {}) {
     let ratio = 0;
     const valid = hasPrev;
     if (hasPrev) {
-      ratio = diffLuma(cur, prev, meanCur, meanPrev, config, mask) / (w * h);
-      dctx.putImageData(diffImage, 0, 0);
+      const show = config.showDisplay;
+      ratio = diffLuma(cur, prev, meanCur, meanPrev, config, show ? mask : undefined) / (w * h);
+      if (show) dctx.putImageData(diffImage, 0, 0);
     }
+    if (!config.showDisplay && diffShown) dctx.clearRect(0, 0, diffCanvas.width, diffCanvas.height);
+    diffShown = config.showDisplay;
     [cur, prev] = [prev, cur];           // swap, don't copy
     meanPrev = meanCur;
     hasPrev = true;
 
     let globalRatio = 0, global = !valid;
-    if (globalGuard) {
+    if (!config.globalGuard) gHasPrev = false;   // don't diff against a stale frame when re-enabled
+    else {
       gctx.drawImage(video, 0, 0, vw, vh, 0, 0, GUARD_W, GUARD_H);
       gMeanCur = toLuma(gctx.getImageData(0, 0, GUARD_W, GUARD_H).data, gCur);
       const denom = gSize - excluded;

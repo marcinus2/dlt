@@ -5,7 +5,7 @@ const CAP = 720;                    // ~12 s @ 60 fps
 export function createGraph(canvas, config) {
   const ctx = canvas.getContext('2d');
   const ratios = new Float32Array(CAP), flags = new Uint8Array(CAP);   // flags: 1 = global, 2 = motion
-  let head = 0, count = 0;
+  let head = 0, count = 0, shown = true;
 
   function push(ratio, global, motion) {
     ratios[head] = ratio;
@@ -17,7 +17,10 @@ export function createGraph(canvas, config) {
   function draw() {
     requestAnimationFrame(draw);
     const W = canvas.width, H = canvas.height;
+    if (!config.showDisplay && !shown) return;
     ctx.clearRect(0, 0, W, H);
+    shown = config.showDisplay;
+    if (!shown) return;
     let top = config.startRatio * 1.5;
     for (let i = 0; i < count; i++) if (ratios[i] > top) top = ratios[i];
     const xAt = (i) => ((CAP - count + i) / (CAP - 1)) * W;     // i = 0 oldest; newest at the right edge
