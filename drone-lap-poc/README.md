@@ -15,7 +15,8 @@ npm test           # unit tests (node --test)
 1. Click **Start Camera** and allow the prompt (Chrome: lock icon next to the URL → Site settings → Camera).
 2. If the page gets no video or the prompt never appears: **System Settings → Privacy & Security → Camera** and enable your browser.
 3. Camera labels are empty until permission is granted; the list refreshes after you allow it.
-4. Continuity Camera (iPhone) may ignore 60 fps. The actual resolution and frame rate are shown in the stats.
+4. Continuity Camera (iPhone) may ignore 60 fps. The actual resolution and the camera-delivered frame rate are shown in the stats.
+5. Android phones: see *Phone performance* below.
 
 ## Using it
 - **Source:** *Start Camera*, or *or file* to load a recorded clip (it loops; loop/seek resets the detector). File timestamps are `mediaTime`, so the same clip gives the same events on every run. iPhone clips must be H.264 (Settings → Camera → Formats → *Most Compatible*), because Chrome doesn't play HEVC.
@@ -23,9 +24,17 @@ npm test           # unit tests (node --test)
 - **Calibrate:** keep the scene static for `calibrationMs`; sets `startRatio` / `endRatio` and logs mean / σ / max.
 - **Views:** camera + ROI (outside area dimmed), diff mask of the ROI, ratio graph (last ~12 s: dashed start/end lines, green = MOTION, pink ticks = global frames).
 - **ROI:** preset dropdown (full / box / vLine / hLine) and x/y/w/h inputs (relative 0–1).
+- **Stats HUD:** `fps` is what we process, `delivered` is what the camera produces (from `presentedFrames`); if they match, the camera is the limit, otherwise we are. `ms/frame` shows total / preview / roi / diff / guard (rolling average).
 - **Beep** on `MOTION_START` (audio unlocks on the first click), **mute** toggle.
 - **Export:** *events CSV* and *frames CSV* (`t, ratio, globalRatio, global, state`; up to 200k rows ≈ 55 min @ 60 fps; detection start clears them).
 - Config and ROI are saved to localStorage on change. *Reset defaults* clears them.
+
+## Phone performance
+Findings from the first tests are in [../docs/first-tests-findings.md](../docs/first-tests-findings.md). Short version for Android Chrome:
+- Keep the camera small (`cameraWidth`/`cameraHeight`, default 240×480) and request 30 fps; video readback cost grows with frame size.
+- **Lock exposure** (`exposureManual`, `exposureTime` × 100 µs; default 100 = 10 ms). Auto-exposure makes the camera drop to 14–20 fps and fluctuate. A darker image needs a lower `pixelDiffThreshold` (default 10). Exposure and focus apply live; camera size and fps apply on **Start Camera**. The event log shows what the camera accepted (`EXPOSURE`, `FOCUS`) or `not supported`.
+- `globalGuard` (second full-frame readback) and `showDisplay` (preview, diff and graph) cost fps; turn them off for the best rate. With the default full-frame ROI nothing is outside the ROI, so the guard is off by default.
+- Settings saved on a device override these defaults; press **Reset defaults** after an update.
 
 ## Algorithm
 Per camera frame (`requestVideoFrameCallback`, fallback rAF):
@@ -80,7 +89,7 @@ Calibration: `startRatio = max(mean + k·σ, 1.2·max, 0.002)`, `endRatio = star
 `public/manifest.webmanifest` + `public/sw.js` (hand-written, no dependencies; network-first with cache fallback, registered in production builds only by `src/pwa.js`). Needs HTTPS: deploy `dist/` to a static host, open it in Android Chrome, then menu → Install app. After one online visit it opens offline. Bump `CACHE` in `sw.js` to drop old caches.
 
 ## Tests
-`npm test` runs `node --test` on `test/`: detector (state machine and the dev-plan §5 rules), motion core (luma, diff, normalisation, exclusion mask), calibration, recorder/CSV and storage. Canvas and camera glue is checked manually.
+`npm test` runs `node --test` on `test/`: detector (state machine and the dev-plan §5 rules), motion core (luma, diff, normalisation, exclusion mask), time-based debounce at several frame rates, calibration, recorder/CSV and storage. Canvas and camera glue is checked manually.
 
 ## Test scenarios (manual, macOS)
 1. Camera at the ceiling, static, 60 s → 0 events; note the idle ratio.
@@ -93,4 +102,4 @@ Calibration: `startRatio = max(mean + k·σ, 1.2·max, 0.002)`, `endRatio = star
 Metrics to note: idle mean/max, peak per pass, SNR = peak / idle max, misses, false starts, suppressed / rejected, FPS, dropped frames, Δstart vs Δpeak spread.
 
 ## Findings
-_To be filled in after Phase 3 (measured numbers, recommended defaults, which timestamp to use for laps)._
+_To be filled in after Phase 3 (measured numbers, recommended defaults, which timestamp to use for laps). Phone performance results so far: [../docs/first-tests-findings.md](../docs/first-tests-findings.md)._

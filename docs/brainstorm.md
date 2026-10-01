@@ -2,6 +2,7 @@
 
 > Status: brainstorm, 2026-10-01. Replaces [PR.md](PR.md) as the PoC prompt.
 > Sections 1–3 = context and decisions. Section 4 = the prompt to execute. Sections 5–7 = backlog and open points.
+> Updated 2026-10-02 after the first phone tests: where the code now differs from the original prompt is marked **(changed)**. Reasons and measurements: [first-tests-findings.md](first-tests-findings.md).
 
 ---
 
@@ -75,7 +76,7 @@ drone-lap-poc/
 ```
 
 ### Frame loop (`source.js`)
-- Request `{ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }`; let the user pick a camera (`enumerateDevices`) so Continuity Camera / an external webcam can be used.
+- **(changed)** Request `{ width: { ideal: cameraWidth }, height: { ideal: cameraHeight }, frameRate: { ideal: cameraFps } }` from config (defaults 240×480 @ 30; `fpsExact` makes the rate a hard `exact`). The original 1280×720@60 made Android phones run at 6–16 fps. Optional `applyConstraints` for manual exposure and focus lock (see §6). Let the user pick a camera (`enumerateDevices`) so Continuity Camera / an external webcam can be used.
 - Process **each camera frame exactly once** with `video.requestVideoFrameCallback()`.
   - Why: `requestAnimationFrame` runs at display rate (60–120 Hz) while the camera gives 30 fps, so the same frame would be compared with itself → ratio 0 every other frame → false `MOTION END`s.
   - Fallback: rAF + skip if `video.currentTime` hasn't changed.
@@ -86,12 +87,12 @@ drone-lap-poc/
 
 ### Motion algorithm (`motion.js`)
 Per frame:
-1. **Crop the ROI from the full-resolution video:** `drawImage(video, sx, sy, sw, sh, 0, 0, pw, ph)`, where the processing size keeps the aspect ratio and its longest side is ≤ `processingMaxSize`. Use `getContext('2d', { willReadFrequently: true })`.
+1. **Crop the ROI from the full-resolution video:** `drawImage(video, sx, sy, sw, sh, 0, 0, pw, ph)`, where the processing size keeps the aspect ratio and its longest side is ≤ `processingMaxSize`. Use `getContext('2d', { willReadFrequently })` driven by `config.readbackHint` (**changed**: a toggle, default on; recreated live when it changes).
 2. Convert to luma in a reused `Uint8Array`: `(77*r + 150*g + 29*b) >> 8`.
-3. **Brightness normalisation** (toggle, default on): `offset = mean(curr) − mean(prev)`, `d = |curr − prev − offset|`. Cancels flicker and exposure drift.
+3. **Brightness normalisation** (toggle, **changed:** default off, since exposure is locked): `offset = mean(curr) − mean(prev)`, `d = |curr − prev − offset|`. Cancels flicker and exposure drift.
 4. A pixel is changed if `d > pixelDiffThreshold`. `ratio = changed / total`.
-5. **Global guard:** draw the full frame at about 80×60, diff it the same way **excluding the ROI area** → `globalRatio`. If `globalRatio > globalGuardRatio`, flag the frame `global: true` (camera bump, lights, exposure jump).
-6. Write the changed-pixel mask to the debug diff canvas.
+5. **Global guard** (**changed:** toggle `globalGuard`, default off; with a full-frame ROI nothing is left outside to guard, and it costs a second video readback per frame): draw the full frame at about 80×60, diff it the same way **excluding the ROI area** → `globalRatio`. If `globalRatio > globalGuardRatio`, flag the frame `global: true` (camera bump, lights, exposure jump).
+6. Write the changed-pixel mask to the debug diff canvas (**changed:** skipped when `showDisplay` is off, along with the preview and graph).
 
 Output: `{ t, ratio, globalRatio, global }`.
 
@@ -112,15 +113,26 @@ Input: `update({ t, ratio, global })` → array of events. Rules:
 ### Config (`config.js`, single object, tunable at runtime, saved to localStorage)
 ```js
 export const config = {
+  // camera (applied on Start Camera; exposure/focus apply live)
+  cameraWidth: 240,            // requested; readback cost scales with frame size
+  cameraHeight: 480,
+  exposureManual: true,        // lock exposure (Android Chrome); a short time keeps the camera at full fps
+  exposureTime: 100,           // units of 100 µs, clamped to the camera's range
+  focusLock: false,            // freeze autofocus at its current distance
+  cameraFps: 30,
+  fpsExact: false,             // true = fail instead of falling back
   // motion
   processingMaxSize: 320,      // longest side of the processed ROI (px)
-  pixelDiffThreshold: 25,      // min luma change per pixel
-  brightnessNormalize: true,   // cancel global brightness shift
+  pixelDiffThreshold: 10,      // min luma change per pixel
+  brightnessNormalize: false,  // cancel global brightness shift
   globalGuardRatio: 0.2,       // outside-ROI change fraction that flags a frame as global
+  globalGuard: false,          // full-frame guard; costs a second video readback per frame
+  showDisplay: true,           // preview, diff view and graph; off = less CPU
+  readbackHint: true,          // willReadFrequently canvases (CPU); off = GPU canvas
   // detector
   startRatio: 0.02,            // ROI fraction to start motion
   endRatio: 0.01,              // ROI fraction below which motion may end (hysteresis)
-  minMotionMs: 30,             // motion must last this long to confirm a start
+  minMotionMs: 30,             // motion must last this long to confirm a start; 0 = one frame
   endHoldMs: 60,               // quiet for this long to confirm an end
   cooldownMs: 1500,            // min gap between accepted STARTs
   maxMotionMs: 3000,           // longer motion = rejected (not a drone pass)
@@ -129,9 +141,11 @@ export const config = {
   // calibration
   calibrationMs: 3000,
   calibrationK: 5,
+  roi: { ...roiPresets.full }, // changed: full frame
 };
 
 export const roiPresets = {           // relative 0–1
+  full:  { x: 0,     y: 0,     width: 1,    height: 1    },
   box:   { x: 0.2,   y: 0.25,  width: 0.6,  height: 0.5  },
   vLine: { x: 0.425, y: 0.1,   width: 0.15, height: 0.8  }, // virtual finish line
   hLine: { x: 0.1,   y: 0.425, width: 0.8,  height: 0.15 },
@@ -152,7 +166,7 @@ Button **Calibrate (static scene)**: collect `ratio` for `calibrationMs` →
   - Camera preview with ROI overlay (outside-ROI guard area dimmed).
   - Debug diff canvas (changed pixels only), which is essential.
   - **Ratio graph:** last ~10 s, with `startRatio`/`endRatio` lines, motion periods shaded, global frames marked.
-- **Live stats:** state, ratio %, start/end thresholds %, processed FPS, dropped frames, rolling idle mean/max, last pass peak + duration + frames, pass count.
+- **Live stats:** state, ratio %, start/end thresholds %, processed FPS, **camera-delivered FPS and per-stage ms (added)**, dropped frames, rolling idle mean/max, last pass peak + duration + frames, pass count.
 - **Controls:** every config field, ROI preset + x/y/w/h inputs, normalisation toggle, mute.
 - **Audio:** short beep on `MOTION_START` (Web Audio, unlocked on first click). You watch the drone, not the screen.
 - **Event log**, e.g.:
@@ -235,11 +249,11 @@ Idle ratio mean/max · peak ratio per pass · **SNR = peak / idle max** · detec
 - Screen Wake Lock API (stop the screen sleeping); watch battery/heat in long sessions.
 - Screen lock / app switch stops the camera → pause/resume the session (`resetGapMs` already covers the detector side).
 - iOS: camera works in an installed PWA on recent iOS but has been buggy, so **test early**. `requestVideoFrameCallback` is supported since Safari 15.4. Audio needs a user tap to unlock.
-- Manual exposure/focus (`applyConstraints` `exposureMode`, `focusMode`) is mostly Android Chrome only. Nice to have there, not something to rely on.
+- Manual exposure/focus (`applyConstraints` `exposureMode`, `focusMode`) is mostly Android Chrome only. **Exposure lock turned out to be the key fix for Android fps** (auto-exposure was dragging the camera to 14–20 fps); it's now a default, and it logs `not supported` where unavailable. Focus lock gave no measurable fps change, so it's an optional toggle.
 - Manifest + service worker for offline use; everything stays on the device.
 
 ## 7. Open questions
 - Phone face-up (front camera) vs rear camera on a stand: decide after the first floor test.
 - Lap timestamp: `Δstart` vs `Δpeak`. Decide from Phase 3 data.
 - Track layout guideline: the camera spot must be crossed **once per lap** (no overlapping track sections above it).
-- Is 60 fps available on target phones in the browser, and does it measurably help?
+- Is 60 fps available on target phones in the browser, and does it measurably help? **Partly answered:** iPhone delivers 55–60; the tested Samsungs deliver ~30 even with manual exposure, and the readback cost (12–13 ms/frame) would not fit a 16.7 ms budget anyway. See findings.
