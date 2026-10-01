@@ -1,4 +1,4 @@
-import { config } from './config.js';
+import { config, roiPresets } from './config.js';
 import { createDetector } from './detector.js';
 import { calibrate } from './calibration.js';
 import { createGraph } from './graph.js';
@@ -229,5 +229,14 @@ for (const key of Object.keys(config)) {
 for (const key of ['x', 'y', 'width', 'height']) {
   addInput($('roiInputs'), config.roi, key, { step: 0.01, min: 0, max: 1 });
 }
+
+// --- ROI presets ---
+$('roiPreset').replaceChildren(...Object.keys(roiPresets).map((k) => new Option(k, k)), new Option('custom', 'custom'));
+$('roiPreset').onchange = (e) => {
+  if (!roiPresets[e.target.value]) return;
+  Object.assign(config.roi, roiPresets[e.target.value]);
+  syncInputs();
+};
+$('roiInputs').oninput = () => { $('roiPreset').value = 'custom'; };
 
 fillCameras().catch(() => {});
