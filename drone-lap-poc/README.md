@@ -22,7 +22,7 @@ npm test           # unit tests (node --test)
 - **Detection:** *Start Detection* / *Stop Detection*. Warm-up (`warmupMs`) ignores the first frames.
 - **Calibrate:** keep the scene static for `calibrationMs`; sets `startRatio` / `endRatio` and logs mean / σ / max.
 - **Views:** camera + ROI (outside area dimmed), diff mask of the ROI, ratio graph (last ~12 s: dashed start/end lines, green = MOTION, pink ticks = global frames).
-- **ROI:** preset dropdown (box / vLine / hLine) and x/y/w/h inputs (relative 0–1).
+- **ROI:** preset dropdown (full / box / vLine / hLine) and x/y/w/h inputs (relative 0–1).
 - **Beep** on `MOTION_START` (audio unlocks on the first click), **mute** toggle.
 - **Export:** *events CSV* and *frames CSV* (`t, ratio, globalRatio, global, state`; up to 200k rows ≈ 55 min @ 60 fps; detection start clears them).
 - Config and ROI are saved to localStorage on change. *Reset defaults* clears them.
@@ -51,9 +51,16 @@ WARMUP ──warmupMs──▶ IDLE ──ratio ≥ start──▶ CANDIDATE ─
 ## Parameters (`src/config.js`, all editable live)
 | Key | Default | Meaning |
 |---|---|---|
+| `cameraWidth` / `cameraHeight` | 240 / 480 | requested camera size; readback cost scales with it (applied on Start Camera) |
+| `exposureManual` / `exposureTime` | true / 100 | lock exposure at `exposureTime` × 100 µs so the camera holds its frame rate (Android Chrome) |
+| `focusLock` | false | freeze autofocus at its current distance |
+| `cameraFps` / `fpsExact` | 30 / false | requested frame rate; `fpsExact` fails instead of falling back |
+| `globalGuard` | true | full-frame guard (a second video readback per frame) |
+| `showDisplay` | true | preview, diff view and graph; off = less CPU |
+| `readbackHint` | true | CPU-backed (`willReadFrequently`) readback canvases; off = GPU canvases |
 | `processingMaxSize` | 320 | longest side of the processed ROI (px) |
-| `pixelDiffThreshold` | 25 | min luma change for a pixel to count |
-| `brightnessNormalize` | true | cancel global brightness shift |
+| `pixelDiffThreshold` | 10 | min luma change for a pixel to count |
+| `brightnessNormalize` | false | cancel global brightness shift |
 | `globalGuardRatio` | 0.2 | outside-ROI change fraction that flags a frame as global |
 | `startRatio` | 0.02 | ROI fraction to start motion |
 | `endRatio` | 0.01 | ROI fraction below which motion may end |
@@ -65,7 +72,7 @@ WARMUP ──warmupMs──▶ IDLE ──ratio ≥ start──▶ CANDIDATE ─
 | `resetGapMs` | 250 | frame gap that resets the previous frame |
 | `calibrationMs` | 3000 | calibration sampling time |
 | `calibrationK` | 5 | σ multiplier in calibration |
-| `roi` | box preset | x / y / width / height, relative 0–1 |
+| `roi` | full frame | x / y / width / height, relative 0–1 |
 
 Calibration: `startRatio = max(mean + k·σ, 1.2·max, 0.002)`, `endRatio = startRatio / 2`. The 0.002 floor stops a perfectly static scene (all zeros) from triggering on a single pixel. Global frames are excluded from the samples. If the idle mean is above 1%, raise `pixelDiffThreshold` or fix lighting first.
 
