@@ -3,6 +3,7 @@ import { createDetector } from './detector.js';
 import { calibrate } from './calibration.js';
 import { createBeeper } from './beep.js';
 import { createGraph } from './graph.js';
+import { createRecorder } from './recorder.js';
 import { createMotion } from './motion.js';
 import { createSource, listCameras } from './source.js';
 
@@ -11,6 +12,7 @@ const video = $('video'), preview = $('preview'), pctx = preview.getContext('2d'
 const source = createSource(video, config);
 const motion = createMotion(config, { globalGuard: true });
 const detector = createDetector(config);
+const recorder = createRecorder();
 const beeper = createBeeper();
 const graph = createGraph($('graph'), config);
 $('diff').append(motion.diffCanvas);
@@ -72,6 +74,7 @@ function setDetecting(on) {
     motion.reset();
     detector.reset();                          // warm-up starts at the first sample
     passes = 0; lastPass = null; dropped = 0; flagged = false;
+    recorder.clear();
   }
 }
 
@@ -88,9 +91,10 @@ function onFrame(frame) {
   dropped += frame.dropped;
   tSource = frame.tSource;
   fpsCount++;
-  if (calib) { graph.push(m.ratio, m.global, false); collectCalibration(m, frame.t); return; }
+  if (calib) { graph.push(m.ratio, m.global, false); recorder.addFrame(frame.t, m.ratio, m.globalRatio, m.global, 'CALIB'); collectCalibration(m, frame.t); return; }
   const events = detector.update({ t: frame.t, ratio: m.ratio, global: m.global, gapReset: frame.gapReset });
-  for (const e of events) onEvent(e);
+  for (const e of events) { recorder.addEvent(e); onEvent(e); }
+  recorder.addFrame(frame.t, m.ratio, m.globalRatio, m.global, detector.state);
   graph.push(m.ratio, m.global, detector.state === 'MOTION');
 }
 
@@ -232,6 +236,17 @@ for (const key of Object.keys(config)) {
 for (const key of ['x', 'y', 'width', 'height']) {
   addInput($('roiInputs'), config.roi, key, { step: 0.01, min: 0, max: 1 });
 }
+
+// --- CSV export ---
+function download(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  a.download = `${name}-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+$('exportEvents').onclick = () => download('events', recorder.eventsCsv());
+$('exportFrames').onclick = () => download('frames', recorder.framesCsv());
 
 // --- beep ---
 document.addEventListener('click', () => beeper.unlock());   // AudioContext needs a user gesture
