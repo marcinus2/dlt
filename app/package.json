@@ -9,6 +9,7 @@
     "build:poc": "cd ../drone-lap-poc && VITE_NO_SW=1 vite build --outDir ../app/dist/poc --emptyOutDir",
     "build:pages": "npm run build && npm run build:poc",
     "preview": "vite preview",
+    "preview:lan": "npm run build:pages && LAN_HTTPS=1 vite preview --host",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "biome ci .",

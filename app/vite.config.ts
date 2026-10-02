@@ -21,8 +21,9 @@ export default defineConfig(({ command, mode, isPreview }) => ({
   plugins: [
     react(),
     tailwindcss(),
-    // HTTPS on the LAN for phone testing (camera needs a secure context). Dev only.
-    command === 'serve' && !isPreview && mode !== 'test' && basicSsl(),
+    // HTTPS on the LAN for phone testing (camera needs a secure context).
+    // Dev server always; `preview` only with LAN_HTTPS=1 (Playwright previews over plain HTTP).
+    command === 'serve' && mode !== 'test' && (!isPreview || process.env.LAN_HTTPS === '1') && basicSsl(),
   ],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
