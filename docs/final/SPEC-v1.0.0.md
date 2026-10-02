@@ -1,6 +1,6 @@
 # Drone Lap Counter — v1.0.0 Specification
 
-> Status: **decisions settled, ready for review**, 2026-10-02. No code exists for v1 yet.
+> Status: **decisions settled, ready for review**, 2026-10-02 (delivery order revised to UI first, §6.1). No code exists for v1 yet. Implementation plan: [PLAN-v1.0.0.md](PLAN-v1.0.0.md).
 > Inputs: PoC in [drone-lap-poc/](../../drone-lap-poc/), [brainstorm](../PoC/brainstorm.md), [dev plan](../PoC/dev-plan.md), [first phone tests](../PoC/first-tests-findings.md).
 
 ---
@@ -18,7 +18,7 @@ All decisions are settled (2026-10-02). D1–D4 and D6–D10 use the recommended
 | D5 | **When to ask for confirmation** ✅ decided | `New session` / `Configuration` during Session or Paused ask **"End session?"** only when the session has data (laps, or timing running). **END asks for confirmation when laps ≥ 1**; with 0 laps it goes straight to Welcome. | Lap data can't be recovered once discarded, so every action that throws laps away asks first. |
 | D6 | **App backgrounded or screen locked mid-session** ✅ decided | **Auto-pause**: the same as STOP, plus a banner and an audible "paused" cue. | The camera stops anyway (iOS ends the track, Android freezes it), so pausing explicitly avoids a fake lap spanning the gap. |
 | D7 | **Repo layout and deployment** ✅ decided | New project in `app/` at the repo root. GitHub Pages serves v1 at the root URL and the PoC at `/poc/` (without its service worker) until v1.1. | Keeps the PoC usable as a tuning tool. Alternative: replace the PoC in place. |
-| D8 | **Gate: PoC Phase 3 field test** ✅ decided | Run it in parallel with M1–M2. It must be done before M3 freezes the detection defaults. | Real whoop/ceiling accuracy hasn't been measured yet (see [findings](../PoC/first-tests-findings.md)). It is the biggest product risk. |
+| D8 | **Gate: PoC Phase 3 field test** ✅ decided | Run it in parallel with M1–M4. It must be done before M5 freezes the detection defaults. | Real whoop/ceiling accuracy hasn't been measured yet (see [findings](../PoC/first-tests-findings.md)). It is the biggest product risk. |
 | D9 | **Spoken phrases** ✅ decided | First pass: "Go". Each lap: "12.34" (2 decimals). New best: "Best, 12.34". Paused: "Paused". English only. | Short enough to finish well before the next lap (≥ 5 s indoors). Lap number off by default. |
 | D10 | **UI framework** ✅ decided | React 19 + TS. | Best support for Motion and the test tooling. If the JS budget (≤ 130 KB gz) is at risk, lazy-load the Configuration tuning panel and debug tools instead of switching framework. |
 
@@ -169,7 +169,7 @@ Hard-coded constants that stay as they are: `MIN_START` 0.002, guard size 80×60
 |---|---|
 | Unlock | Create or `resume()` the `AudioContext` **and** prime `speechSynthesis` (speak `' '` at volume 0) inside the GET READY, START and CONTINUE tap handlers. iOS requires the first `speak()` to come from a gesture. |
 | iOS states | If the context reports `interrupted`/`suspended` (calls, backgrounding) → resume on the next gesture (CONTINUE). If it is still not running after START → banner "Tap to enable sound". |
-| iOS silent switch | Web Audio is muted by the ring/silent switch. Set `navigator.audioSession.type = 'playback'` where available (Safari 17+, verify). Whether speech obeys the switch: verify in M4. |
+| iOS silent switch | Web Audio is muted by the ring/silent switch. Set `navigator.audioSession.type = 'playback'` where available (Safari 17+, verify). Whether speech obeys the switch: verify in M6. |
 | Voice choice | Prefer an `en-*` voice with `localService: true` (desktop Chrome's "Google" voices need the network). Load with `getVoices()` + `voiceschanged`. No voice → beep only, and Configuration shows "Voice not available". |
 | Latency | Beep < 20 ms. Speech typically 100–400 ms after priming; the first utterance without priming can take ~1 s. Call `speechSynthesis.cancel()` before each new utterance so a lap never queues behind an old one. Rate 1.1. |
 | Cues | `armed`: soft 440 Hz 120 ms · `go` (first pass): 660→990 Hz + "Go" · `lap`: 880 Hz 60 ms (PoC) + "12.34" · `best`: lap beep + "Best, 12.34" · `paused` (auto): 990→495 Hz + "Paused". |
@@ -179,14 +179,14 @@ Hard-coded constants that stay as they are: `MIN_START` 0.002, guard size 80×60
 | Option | Pros | Cons | v1 |
 |---|---|---|---|
 | A. Main thread, rVFC + 2D canvas readback (PoC) | Measured 27–30 fps on Android, works on iOS | Readback blocks the main thread for 6–14 ms | **Default.** The Session UI is static between laps, and React never renders per frame |
-| B. Worker + `OffscreenCanvas`, frames sent as `createImageBitmap(video)` (transferable) | Readback and diff leave the main thread | Extra bitmap copy, async latency; needs measuring | Spike in v1.1 if M9 shows UI jank |
+| B. Worker + `OffscreenCanvas`, frames sent as `createImageBitmap(video)` (transferable) | Readback and diff leave the main thread | Extra bitmap copy, async latency; needs measuring | Spike in v1.1 if M10 shows UI jank |
 | C. Worker + `MediaStreamTrackProcessor` → `VideoFrame.copyTo()` (Y plane = luma for free) | Fastest, no RGBA conversion | Chromium-first; Safari support partial (verify) | v1.x behind the same interface |
 
 The engine is built behind `FrameSource → FrameAnalyzer → Detector` so B or C later only replaces the analyzer host. The pure core stays free of DOM calls so it can run in a worker.
 
 ### 2.5 PWA shell
 
-- **Manifest** (generated): `name` "Drone Lap Counter", `short_name` "Lap Counter", `id`/`start_url`/`scope` `./`, `display: standalone`, **`orientation: portrait`**, `background_color`/`theme_color` `#0A0D12`, icons 192/512/maskable-512, apple-touch-icon 180, 2 screenshots (richer Android install sheet).
+- **Manifest** (generated): `name` "Drone Lap Counter", `short_name` "Lap Counter", `id`/`start_url`/`scope` `./`, `display: standalone`, **`orientation: portrait`**, `background_color`/`theme_color` `#0A0D12`, icons 192/512/maskable-512, apple-touch-icon 180, 2 screenshots (richer Android install sheet). Until M9 a static hand-written manifest with the same fields (no service worker) lets testers add the app to the home screen.
 - **Offline**: precache all build assets and fonts; `navigateFallback: index.html`. The app works fully offline after the first load. At activation, delete the PoC's `lap-counter-v1` cache (the same scope URL means the v1 SW replaces the PoC SW).
 - **Updates**: `registerType: 'prompt'`. The "New version — Reload" toast is shown **only on Welcome/Configuration**, never mid-session.
 - **Install**: catch `beforeinstallprompt` → "Install app" link in the Welcome footer. On iOS, a one-time hint card ("Share → Add to Home Screen") whose dismissal is kept in `dronelap.ui.v1`. Hidden when `display-mode: standalone`.
@@ -208,7 +208,7 @@ The engine is built behind `FrameSource → FrameAnalyzer → Detector` so B or 
 
 ### 2.7 Hosting and deployment
 
-GitHub Pages via an extended `deploy.yml`: build `app/` → `dist/`, build the PoC into `dist/poc/` with SW registration removed (D7). Keep `base: './'` so the app works at any sub-path. HTTPS comes from Pages.
+GitHub Pages via a CI workflow (`ci.yml`, replacing `deploy.yml`): build `app/` → `dist/`, build the PoC into `dist/poc/` with SW registration removed (D7). It deploys on every push to `main` and on manual dispatch from any branch, so work in progress can be checked on real devices. Keep `base: './'` so the app works at any sub-path. HTTPS comes from Pages.
 
 ---
 
@@ -513,10 +513,14 @@ app/
 │   │   ├── cues.ts  speech.ts  unlock.ts  announcer.ts                       (+ announcer test)
 │   ├── platform/
 │   │   ├── wake-lock.ts  visibility.ts  orientation.ts  install.ts  permissions.ts
+│   ├── sim/                  # NO React. Simulated DetectorEngine + FrameSource (default until M5, then ?sim=1)
+│   │   ├── sim-engine.ts  sim-camera.ts                                      (+ sim-engine test)
 │   ├── ui/
 │   │   ├── screens/  Welcome.tsx GetReady.tsx Session.tsx Configuration.tsx
 │   │   ├── components/ TopBar BigButton ActionBar LapHero LapList StatusChip
 │   │   │               ConfirmDialog Banner CameraLayer RoiOverlay SettingField
+│   │   ├── sim/      SimPanel (SIMULATED chip, Pass button; lazy-loaded)
+│   │   ├── gallery/  state presets for UX review (?gallery, ?state=<preset>; lazy-loaded)
 │   │   └── debug/    RatioGraph DiffView Hud EventLog (lazy-loaded, ?debug=1)
 │   └── styles/index.css     # tailwind + @theme tokens
 └── e2e/
@@ -525,9 +529,9 @@ app/
 ```
 
 **Boundaries** (enforced with Biome `noRestrictedImports`):
-- `engine/`, `session/`, `settings/` (except `storage.ts`) and `app/machine.ts` must not import React or `ui/`.
+- `engine/`, `session/`, `settings/` (except `storage.ts`), `sim/` and `app/machine.ts` must not import React or `ui/`.
 - `engine/*` outside `browser/` must not touch DOM globals.
-- `ui/` must not import `engine/browser` directly. It goes through the store/effects. The only exception is `CameraLayer`, which receives the `<video>` element.
+- `ui/` must not import `engine/browser` or `sim/` directly. It goes through the store/effects. The only exception is `CameraLayer`, which receives the `<video>` element.
 
 ### 5.2 Key types
 
@@ -661,7 +665,7 @@ export function reduce(s: AppState, e: AppEvent): { state: AppState; effects: Ef
 | Unit | Detector (port all 30 tests), motion core, calibration, settings validate/migrate/storage (incl. v1 PoC payloads), lap math (first pass, STOP/CONTINUE boundary, best ties, format), machine (one test per §3.2 row + illegal events), announcer text | Vitest (node) |
 | Integration | Engine with fake source/analyzer: stop is synchronous, run id drops late events, size change resets, warm-up after reset; golden CSV replays | Vitest |
 | Component | `LapList` best highlight + 500-row cap, `SettingField` range errors, `ConfirmDialog` focus | Vitest + Testing Library (happy-dom) |
-| E2E | (1) Happy path: GET READY → START → N laps shown and best highlighted · (2) STOP/CONTINUE keeps laps and discards the in-progress lap; END with laps → confirm dialog, Cancel keeps the session · (3) config edit → New session → discard dialog; Save survives reload · (4) permission denied → error card · (5) offline reload after SW install · (6) axe accessibility scan per screen | Playwright (Chromium; WebKit for layout + axe only) |
+| E2E | (1) Happy path: GET READY → START → N laps shown and best highlighted · (2) STOP/CONTINUE keeps laps and discards the in-progress lap; END with laps → confirm dialog, Cancel keeps the session · (3) config edit → New session → discard dialog; Save survives reload · (4) permission denied → error card · (5) offline reload after SW install · (6) axe accessibility scan per screen and per gallery state. Flows 1–3 and 6 run first in **sim mode** (M2), then 1–2 again on the real pipeline with the fake camera (M5) | Playwright (Chromium; WebKit for layout + axe only) |
 | Manual | Device matrix per release: 2 Samsung (Chrome), iPhone (Safari + installed), macOS Chrome/Safari; 30-min soak (fps stable, memory flat); audio with silent switch; rotation while flat | Checklist in `docs/final/` |
 
 **CI** (GitHub Actions, on PR and main): `npm ci` → `biome ci` → `tsc --noEmit` → `vitest run --coverage` (≥ 90 % lines on `engine/` `session/` `settings/` `app/machine.ts`) → `vite build` + JS size check against the 130 KB gz budget → Playwright Chromium e2e. On main, deploy to Pages (§2.7).
@@ -674,20 +678,23 @@ export function reduce(s: AppState, e: AppEvent): { state: AppState; effects: Ef
 
 Each milestone ends deployed, with CI green, and verifiable on a phone.
 
+**UI first**: a clickable, simulated version of the whole UI goes to GitHub Pages before detection is wired in, so the look and feel can be checked on real devices early. The prototype runs on the real state machine, lap logic, settings and engine interfaces, with simulated camera and engine behind them (§5.1 `sim/`). Task-level breakdown: [PLAN-v1.0.0.md](PLAN-v1.0.0.md).
+
 | # | Milestone | Content | Acceptance criteria |
 |---|---|---|---|
 | M0 | **Field validation** (PoC, parallel, D8) | PoC Phase 3: ceiling/whoop scenarios, iPhone re-check, Δstart vs Δpeak, export CSVs | Success criteria from the brainstorm measured; ≥ 3 frames-CSV fixtures committed; D1 confirmed or revised; default changes listed |
-| M1 | **Scaffold + CI + deploy** | `app/` with Vite/React/TS/Tailwind/Biome/Vitest/Playwright, tokens + fonts, empty screen shell, workflow builds app + PoC under `/poc/`; update `.claude/CLAUDE.md` with v1 rules | HTTPS URL opens the shell on Android and iOS; PoC reachable at `/poc/`; CI runs all stages |
-| M2 | **Engine port** | TS port of detector/motion-core/calibration + tests; `CameraSource`, `FileSource`, `FrameAnalyzer`, `DetectorEngine`; minimal `?debug=1` page (ratio, events, HUD) | All ported PoC tests green; reference Samsung ≥ 27 fps at defaults; same events as the PoC on a replayed clip; `stop()` leaves no rVFC or tracks running |
-| M3 | **Session core** | `laps.ts`, `machine.ts`, store + effect runner; unstyled screens wired end-to-end; settings schema with defaults (frozen after M0) | Every §3.2 row has a passing test; e2e flows 1–2 pass with the fake camera; manual: 10 hand-wave laps on a phone are timed correctly |
-| M4 | **Audio** | Cues, speech, unlock, announcer, iOS audio session | On Android Chrome and iPhone (browser and installed): armed / go / lap / best / paused cues heard; speech starts ≤ 500 ms after `MOTION_END` (p90 of 20 laps); beep/voice toggles respected; no queued speech backlog |
-| M5 | **Configuration** | Schema-driven grouped form, validation, draft/Save/discard dialog, v1 migration, Reset to defaults, camera picker + facing, ROI presets + overlay, Test & calibrate panel, Diagnostics (debug) | e2e flow 3 passes; PoC-saved settings migrate; invalid values can't be saved; Calibrate updates the draft; exposure capability shown per device |
-| M6 | **Platform robustness** | Wake lock, visibility auto-pause, track-ended handling, all §3.4 camera errors, orientation handling, `beforeunload`, low-fps warning | Every §3.4 row checked manually or by e2e (flow 4); screen stays on for 10 min of session; lock/unlock mid-session → Paused with banner, CONTINUE works |
-| M7 | **Visual design + motion + a11y** | Final layouts (portrait, landscape, desktop), transitions, best-lap highlight, reduced motion, keyboard shortcuts | Matches §4 wireframes; axe: 0 serious issues; reduced-motion verified; latest lap readable at 3 m (manual); no layout shift on lap update |
-| M8 | **PWA** | `vite-plugin-pwa`, manifest, icons, precache, update toast, install prompt / iOS hint, PoC cache clean-up | Lighthouse: installable; airplane-mode cold start works after first visit (e2e flow 5); update toast never appears mid-session; installs on Android and iOS |
-| M9 | **Release hardening → v1.0.0** | Device matrix, 30-min soak, bundle budget, user guide (setup, placement, calibration, troubleshooting), CHANGELOG, tag `v1.0.0` | Matrix checklist all green; soak: fps drift < 10 % and heap flat; JS ≤ 130 KB gz; README/user guide merged |
+| M1 | **Scaffold + CI + Pages deploy** | `app/` with Vite/React/TS/Tailwind/Biome/Vitest/Playwright, tokens + fonts, empty screen shell, version + git SHA in footer, static manifest (no SW) for home-screen install, workflow builds app + PoC under `/poc/` on `main` and by manual dispatch from any branch; update `.claude/CLAUDE.md` with v1 rules | HTTPS URL opens the shell on Android and iOS (browser and home screen); PoC reachable at `/poc/`; CI runs all stages |
+| M2 | **UX prototype** (simulated) | `laps.ts`, `machine.ts`, settings schema + validation + basic storage, store + effect runner; `SimEngine`/`SimCamera` + sim controls (`SIMULATED` chip, Pass button); all screens and components at final style; Configuration form (draft/Save/discard, Reset); layouts (portrait, landscape, desktop); motion, reduced motion, keyboard; state gallery (`?gallery`, `?state=`) | Complete app clickable on the Pages URL on Android, iPhone and desktop; every §3.2 row has a passing test; e2e flows 1–3 pass in sim mode; axe: 0 serious issues on every gallery state; JS within budget |
+| M3 | **UX review → freeze** | Device review checklist, iteration rounds, real-camera preview check (incl. iOS installed-PWA re-prompt), screenshots of every gallery state, spec §3/§4 updated where the UX changed | UX signed off; matches §4 (as updated); latest lap readable at 3 m; no layout shift on lap update |
+| M4 | **Engine port** (can run alongside M2–M3) | TS port of detector/motion-core/calibration + tests; `CameraSource`, `FileSource`, `FrameAnalyzer`, `DetectorEngine`; minimal `?debug=1` page (ratio, events, HUD) | All ported PoC tests green; reference Samsung ≥ 27 fps at defaults; same events as the PoC on a replayed clip; `stop()` leaves no rVFC or tracks running |
+| M5 | **Real detection in the app** | Real camera + engine behind the effect runner (sim moves to `?sim=1`); detection defaults frozen from M0; fake-camera `.y4m` e2e | e2e flows 1–2 pass on the real pipeline with the fake camera; manual: 10 hand-wave laps on a phone are timed correctly |
+| M6 | **Audio** | Cues, speech, unlock, announcer, iOS audio session | On Android Chrome and iPhone (browser and installed): armed / go / lap / best / paused cues heard; speech starts ≤ 500 ms after `MOTION_END` (p90 of 20 laps); beep/voice toggles respected; no queued speech backlog |
+| M7 | **Configuration functionality** | v1 migration, camera picker + facing + capabilities, ROI presets driving the analyzer, Test & calibrate panel, Diagnostics (debug) | e2e flow 3 passes on the real build; PoC-saved settings migrate; invalid values can't be saved; Calibrate updates the draft; exposure capability shown per device |
+| M8 | **Platform robustness** | Wake lock, visibility auto-pause, track-ended handling, all §3.4 camera errors, orientation handling, `beforeunload`, low-fps warning | Every §3.4 row checked manually or by e2e (flow 4); screen stays on for 10 min of session; lock/unlock mid-session → Paused with banner, CONTINUE works |
+| M9 | **PWA offline + install** | `vite-plugin-pwa` replaces the static manifest, icons, precache, update toast, install prompt / iOS hint, PoC cache clean-up | Lighthouse: installable; airplane-mode cold start works after first visit (e2e flow 5); update toast never appears mid-session; installs on Android and iOS |
+| M10 | **Release hardening → v1.0.0** | Device matrix, 30-min soak, final visual pass with real sessions, bundle budget, user guide (setup, placement, calibration, troubleshooting), CHANGELOG, tag `v1.0.0` | Matrix checklist all green; soak: fps drift < 10 % and heap flat; JS ≤ 130 KB gz; README/user guide merged |
 
-Order dependencies: M0 ∥ M1–M2 → M3 (needs M0 for defaults) → M4, M5, M6 (any order) → M7 → M8 → M9. M8 can be pulled earlier if offline field testing is needed.
+Order dependencies: M1 → M2 → M3; M1 → M4 (in parallel with M2–M3); M0 + M3 + M4 → M5 → M6, M7, M8 (any order) → M9 → M10. M9 can be pulled earlier if offline field testing is needed.
 
 ### 6.2 Open questions and risks
 
@@ -696,10 +703,10 @@ Order dependencies: M0 ∥ M1–M2 → M3 (needs M0 for defaults) → M4, M5, M6
 | Real whoop detection accuracy unmeasured (Phase 3 pending) | Product fails its core job | M0 gate (D8); golden fixtures; tuning panel |
 | iOS: no manual exposure → auto-exposure fps drops, threshold 10 too sensitive | False or missed laps on iPhone | Per-platform defaults if M0 shows a need (e.g. `pixelDiffThreshold` 20 on iOS); Calibrate prompt on first run |
 | False lap when the pilot approaches to press STOP | Last lap wrong | Documented limitation; `maxMotionMs`; undo-last-lap in v1.1 |
-| iOS silent switch / speech behaviour | No audio feedback | `audioSession.type='playback'`; on-screen banner; test in M4 |
+| iOS silent switch / speech behaviour | No audio feedback | `audioSession.type='playback'`; on-screen banner; test in M6 |
 | `speechSynthesis` voice and latency on Android | Late or missing voice | Local voice choice, priming, beep always plays; recorded digits in v1.x |
-| iOS installed PWA camera re-prompt / quirks | Friction on every launch | Test in M1; guide text |
-| Thermal/battery in long sessions | Fps decay | Soak test M9; no preview during Session; Worker/MSTP spike in v1.1 |
+| iOS installed PWA camera re-prompt / quirks | Friction on every launch | Test in M3 (prototype has a real camera preview); guide text |
+| Thermal/battery in long sessions | Fps decay | Soak test M10; no preview during Session; Worker/MSTP spike in v1.1 |
 | Orientation flips while flat | Layout jumps | Portrait lock; neutral frames on size change (tested) |
 | React bundle vs budget | Slower first load | Lazy-load debug and Configuration tuning; size check in CI |
 | Front camera quality in low light | Lower SNR | Rear-camera option; calibration hint |
