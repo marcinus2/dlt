@@ -98,7 +98,10 @@ export function createSimCamera(opts: SimCameraOptions = {}): SimCamera {
       ctx.fillStyle = 'rgba(154,166,182,0.8)';
       ctx.font = font;
       ctx.textAlign = 'center';
+      // The UI mirrors the front camera; pre-mirror the label so it reads correctly.
+      if (s.facing === 'user') ctx.setTransform(-1, 0, 0, 1, w, 0);
       ctx.fillText('SIMULATED CAMERA', w / 2, h - w / 10);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);

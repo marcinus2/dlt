@@ -48,6 +48,12 @@ export interface SimControls {
   /** Every camera start fails with this kind until cleared. */
   setCameraFailure(kind: CameraError['kind'] | null): void;
   cameraFailure(): CameraError['kind'] | null;
+  /** Fixed lap time, or null for random 10–15 s. */
+  setLapMs(ms: number | null): void;
+  lapMs(): number | null;
+  /** Recent sim log lines (cues, wake lock) — no audio before M6. */
+  log(): readonly { id: number; text: string }[];
+  onLog(cb: () => void): () => void;
 }
 
 export interface AppStore {
