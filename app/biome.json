@@ -1,0 +1,249 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!**/dist", "!**/coverage", "!**/playwright-report", "!**/test-results"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 110
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "No Node APIs in app code; it runs in the browser."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/engine/**",
+        "src/session/**",
+        "src/settings/**",
+        "!src/settings/storage.ts",
+        "src/sim/**",
+        "src/app/machine.ts",
+        "src/app/machine.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "No Node APIs in app code; it runs in the browser."
+                  },
+                  {
+                    "group": ["**/ui", "**/ui/**"],
+                    "message": "Pure modules must not import ui/ (spec \u00a75.1)."
+                  }
+                ],
+                "paths": {
+                  "react": "Pure modules must not import React (spec \u00a75.1).",
+                  "react-dom": "Pure modules must not import React (spec \u00a75.1).",
+                  "react-dom/client": "Pure modules must not import React (spec \u00a75.1).",
+                  "react/jsx-runtime": "Pure modules must not import React (spec \u00a75.1).",
+                  "motion": "Pure modules must not import UI libraries (spec \u00a75.1).",
+                  "motion/react": "Pure modules must not import UI libraries (spec \u00a75.1).",
+                  "lucide-react": "Pure modules must not import UI libraries (spec \u00a75.1).",
+                  "zustand": "Pure modules must not import the store (spec \u00a75.1)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/engine/**", "!src/engine/browser/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "window": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "document": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "navigator": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "location": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "localStorage": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "sessionStorage": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "requestAnimationFrame": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "cancelAnimationFrame": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "OffscreenCanvas": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "ImageData": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "MediaStream": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "HTMLCanvasElement": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "speechSynthesis": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1).",
+                  "AudioContext": "engine/ outside engine/browser must not touch the DOM (spec \u00a75.1)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/*.ts", "src/ui/*.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "No Node APIs in app code; it runs in the browser."
+                  },
+                  {
+                    "group": ["../sim", "../sim/**"],
+                    "message": "ui/ must not import sim/ directly; go through the store (spec \u00a75.1)."
+                  },
+                  {
+                    "group": ["**/engine/browser", "**/engine/browser/**"],
+                    "message": "ui/ must not import engine/browser directly; go through the store (spec \u00a75.1)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/*/*.ts", "src/ui/*/*.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "No Node APIs in app code; it runs in the browser."
+                  },
+                  {
+                    "group": ["../../sim", "../../sim/**"],
+                    "message": "ui/ must not import sim/ directly; go through the store (spec \u00a75.1)."
+                  },
+                  {
+                    "group": ["**/engine/browser", "**/engine/browser/**"],
+                    "message": "ui/ must not import engine/browser directly; go through the store (spec \u00a75.1)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/*/*/*.ts", "src/ui/*/*/*.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "No Node APIs in app code; it runs in the browser."
+                  },
+                  {
+                    "group": ["../../../sim", "../../../sim/**"],
+                    "message": "ui/ must not import sim/ directly; go through the store (spec \u00a75.1)."
+                  },
+                  {
+                    "group": ["**/engine/browser", "**/engine/browser/**"],
+                    "message": "ui/ must not import engine/browser directly; go through the store (spec \u00a75.1)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/*/*/*/*.ts", "src/ui/*/*/*/*.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "No Node APIs in app code; it runs in the browser."
+                  },
+                  {
+                    "group": ["../../../../sim", "../../../../sim/**"],
+                    "message": "ui/ must not import sim/ directly; go through the store (spec \u00a75.1)."
+                  },
+                  {
+                    "group": ["**/engine/browser", "**/engine/browser/**"],
+                    "message": "ui/ must not import engine/browser directly; go through the store (spec \u00a75.1)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
