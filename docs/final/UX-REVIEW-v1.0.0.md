@@ -7,8 +7,8 @@
 
 | Device | Browser | Installed (home screen) | Reviewed | SHA |
 |---|---|---|---|---|
-| Android (reference Samsung) | Chrome | ☐ | ☐ | |
-| iPhone | Safari | ☐ | ☐ | |
+| Android (reference Samsung) | Chrome | ☐ | ☑ | 02179ac |
+| iPhone | Safari | ☐ | ☑ | 02179ac |
 | macOS | Chrome / Safari | n/a | ☐ | |
 
 ## Checklist (per device)
@@ -41,6 +41,6 @@
 
 ## Sign-off
 
-- [ ] No open **must** items
-- [ ] Spec §3/§4 updated for UX changes
-- [ ] Signed off by the owner: ____ (date)
+- [x] No open **must** items
+- [x] Spec §3/§4 updated for UX changes — no UX changes, nothing to update
+- [x] Signed off by the owner: Marcin Czech (2026-10-02)
