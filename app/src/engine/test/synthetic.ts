@@ -1,5 +1,6 @@
 // Synthetic luma frames (spec §5.3): a dark blob crossing a bright, slightly noisy background.
 // Deterministic (seeded) so tests and fixtures are reproducible.
+import { diffLuma } from '../motion-core.ts';
 import type { Ms } from '../types.ts';
 
 /** Small seeded PRNG, uniform in [0, 1). */
@@ -77,13 +78,39 @@ export function syntheticClip(o: ClipOptions): Clip {
   };
 }
 
-/** Writes a luma frame as RGBA (grey), e.g. for a fake canvas. */
-export function lumaToRgba(luma: Uint8Array, out: Uint8ClampedArray): void {
-  for (let i = 0, j = 0; i < luma.length; i++, j += 4) {
-    const v = luma[i] as number;
-    out[j] = v;
-    out[j + 1] = v;
-    out[j + 2] = v;
-    out[j + 3] = 255;
+export interface RecordingOptions extends ClipOptions {
+  /** [from, to) ms: ratio replaced with HI-ish noise (a hand waving → REJECTED). */
+  longMotion?: readonly [Ms, Ms][];
+  /** [from, to) ms: frames flagged global (lights switched). */
+  globalBursts?: readonly [Ms, Ms][];
+}
+
+/**
+ * Rows `{ t, ratio, globalRatio, global }` of a synthetic session as the PoC would record it:
+ * clip → diffLuma → ratio, then the scripted overlays. The first frame is neutral.
+ */
+export function syntheticRows(o: RecordingOptions, pixelDiffThreshold = 10) {
+  const clip = syntheticClip(o);
+  const n = clip.width * clip.height;
+  const random = mulberry32((o.seed ?? 1) + 1);
+  const inside = (t: Ms, spans: readonly [Ms, Ms][] = []) => spans.some(([a, b]) => t >= a && t < b);
+  let cur = new Uint8Array(n);
+  let prev = new Uint8Array(n);
+  const rows: { t: Ms; ratio: number; globalRatio: number; global: boolean }[] = [];
+  for (let i = 0; i < clip.frameCount; i++) {
+    const t = clip.t(i);
+    clip.render(i, cur);
+    let ratio = i > 0 ? diffLuma(cur, prev, 0, 0, { pixelDiffThreshold, brightnessNormalize: false }) / n : 0;
+    [cur, prev] = [prev, cur];
+    let global = i === 0;
+    let globalRatio = 0;
+    if (inside(t, o.longMotion)) ratio = 0.04 + random() * 0.08;
+    if (inside(t, o.globalBursts)) {
+      global = true;
+      globalRatio = 0.5 + random() * 0.4;
+      ratio = 0.3 + random() * 0.5;
+    }
+    rows.push({ t, ratio, globalRatio, global });
   }
+  return rows;
 }

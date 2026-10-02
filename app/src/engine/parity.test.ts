@@ -5,6 +5,7 @@ import { expect, it } from 'vitest';
 import { createDetector as createPocDetector } from '../../../drone-lap-poc/src/detector.js';
 import { DEFAULTS } from '../settings/schema.ts';
 import { createDetector, type DetectorSample, type DetectorSettings } from './detector.ts';
+import { parseFramesCsv, replay } from './replay.ts';
 import { mulberry32 } from './test/synthetic.ts';
 
 const LEVELS = [0, 0.004, 0.008, 0.015, 0.03, 0.08];
@@ -50,4 +51,18 @@ it('TS detector matches the PoC on random streams', () => {
   // every event type is exercised
   for (const type of ['MOTION_START', 'MOTION_END', 'SUPPRESSED', 'REJECTED'])
     expect(seen.get(type), type).toBeGreaterThan(20);
+});
+
+it('golden fixtures replay to the same events through the PoC detector', () => {
+  const fixtures = import.meta.glob<string>('../../test/fixtures/**/*.csv', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+  for (const [path, csv] of Object.entries(fixtures)) {
+    const rows = parseFramesCsv(csv);
+    const poc = createPocDetector({ ...DEFAULTS.detection });
+    const pocEvents = rows.flatMap((r) => poc.update(r));
+    expect(replay(rows, DEFAULTS.detection).events, path).toEqual(pocEvents);
+  }
 });
