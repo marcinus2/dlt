@@ -60,14 +60,14 @@ export function ConfirmDialog({
           ref={cancel}
           type="button"
           onClick={onCancel}
-          className="min-h-14 flex-1 rounded-full border-2 border-border bg-surface-2 px-4 text-lg font-bold text-text"
+          className="min-h-14 flex-1 rounded-full border-2 border-border bg-surface-2 px-4 text-xl font-bold text-text"
         >
           {cancelLabel}
         </button>
         <button
           type="button"
           onClick={onConfirm}
-          className="min-h-14 flex-1 rounded-full bg-danger px-4 text-lg font-bold text-text"
+          className="min-h-14 flex-1 rounded-full bg-danger px-4 text-xl font-bold text-text"
         >
           {confirmLabel}
         </button>

@@ -72,9 +72,14 @@ export function Session() {
           <Banners paused={paused} />
           <LapHero session={session} />
         </div>
-        <div className="min-h-0 overflow-y-auto overscroll-contain px-safe pt-2 [grid-area:list] md:border-l md:border-border md:pt-4 landscape:border-l landscape:border-border landscape:pt-4">
+        <section
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll container must be focusable for keyboard users (axe scrollable-region-focusable)
+          tabIndex={0}
+          aria-label="History"
+          className="min-h-0 overflow-y-auto overscroll-contain px-safe pt-2 [grid-area:list] md:border-l md:border-border md:pt-4 landscape:border-l landscape:border-border landscape:pt-4"
+        >
           <LapList laps={session.laps} bestIdx={session.bestIdx} />
-        </div>
+        </section>
         <ActionBar key={screen} className="[grid-area:actions] md:max-w-[480px] md:justify-self-stretch">
           {paused ? (
             <>

@@ -16,7 +16,7 @@ export default defineConfig({
     // Fake-camera flags are added in M5.
     { name: 'chromium', use: { ...devices['Pixel 7'] } },
     // WebKit: layout smoke + axe only.
-    { name: 'webkit', use: { ...devices['iPhone 15'] } },
+    { name: 'webkit', use: { ...devices['iPhone 15'] }, testMatch: ['smoke.spec.ts', 'gallery.spec.ts'] },
   ],
   webServer: {
     command: `npm run preview -- --port ${PORT} --strictPort`,
