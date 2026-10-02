@@ -10,7 +10,8 @@ import { useApp } from '../store.tsx';
 
 function HealthLine() {
   const camera = useApp((s) => s.state.camera);
-  const fps = useApp((s) => s.ui.stats?.fps ?? s.ui.cameraInfo?.fps ?? null);
+  // Processed fps once frames flow (0 before the first interval); the camera's own rate until then.
+  const fps = useApp((s) => s.ui.stats?.fps || s.ui.cameraInfo?.fps || null);
   const facing = useApp((s) => s.ui.cameraInfo?.facing ?? s.saved.camera.facing);
   const lowFps = useApp((s) => s.ui.lowFps);
 

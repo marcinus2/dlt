@@ -3,7 +3,7 @@ import { DEFAULTS } from '../src/settings/schema.ts';
 import { SETTINGS_KEY } from '../src/settings/storage.ts';
 
 /** Sim mode with the placeholder camera, no auto passes. */
-export const SIM_URL = './?cam=fake&auto=0';
+export const SIM_URL = './?sim=1&cam=fake&auto=0';
 
 /** Saved settings with no arming time and no cooldown, so tests can pass quickly. */
 export async function fastSettings(page: Page) {

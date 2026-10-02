@@ -27,6 +27,16 @@ describe('App', () => {
     expect(store.getState().state.screen).toBe('getReady');
     await wait(320);
     expect(screen.getByTestId('camera-health').textContent).toBe('30 fps · front camera');
+    const stats = {
+      fps: 0,
+      deliveredFps: null,
+      dropped: 0,
+      msPerFrame: 0,
+      ratio: 0,
+      tSource: 'now' as const,
+    };
+    act(() => store.getState().setUi({ stats })); // engine started, no frame interval yet
+    expect(screen.getByTestId('camera-health').textContent).toBe('30 fps · front camera');
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
     expect(store.getState().state.screen).toBe('session');
     expect(screen.getByRole('status').textContent).toBe('Arming');
