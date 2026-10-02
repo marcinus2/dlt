@@ -1,14 +1,16 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createRealEffects } from './app/real.ts';
 import { type AppStoreApi, createAppStore, type StoreOptions } from './app/store.ts';
 import { createSettingsStorage, memoryBackend } from './settings/storage.ts';
 import { App } from './ui/App.tsx';
 import { StoreProvider } from './ui/store.tsx';
 import './styles/index.css';
 
-// URL flags, read once (spec §2: no routing). Sim is the default until M5 (G11).
+// URL flags, read once (spec §2: no routing). Real engine by default; sim is opt-in (`?sim=1`, G11).
 const params = new URLSearchParams(location.search);
 const debug = params.get('debug') === '1';
+const sim = params.get('sim') === '1';
 const lap = Number(params.get('lap'));
 const presetId = params.get('state');
 
@@ -18,10 +20,18 @@ const reactRoot = createRoot(root);
 
 async function boot(): Promise<AppStoreApi> {
   const gallery = presetId !== null; // G12: sim-backed, placeholder camera, never touches saved settings
+  if (!sim && !gallery) {
+    const effects = createRealEffects({
+      settings: createSettingsStorage(),
+      log: debug ? (msg) => console.info(`[fx] ${msg}`) : undefined,
+    });
+    return createAppStore({ effects, debug });
+  }
   const [{ createSim }, presets] = await Promise.all([
     import('./sim/index.ts'),
     gallery ? import('./ui/gallery/presets.ts') : null,
   ]);
+  // Sim-only flags: `?cam=fake` placeholder camera, `?auto=0`, `?lap=<s>`.
   const { effects, controls } = createSim({
     settings: createSettingsStorage(gallery ? memoryBackend() : undefined),
     realCamera: !gallery && params.get('cam') !== 'fake',
