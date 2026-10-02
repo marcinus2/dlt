@@ -1,7 +1,7 @@
 // App store: machine state + settings draft + UI flags. dispatch() reduces, then runs
 // effects synchronously (gesture-bound effects stay inside the tap handler).
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { CameraInfo, EngineStats, Settings } from '../engine/types.ts';
+import type { CameraError, CameraInfo, EngineStats, Settings } from '../engine/types.ts';
 import { DEFAULTS, type SettingKey, setSetting } from '../settings/schema.ts';
 import { equalSettings, type SettingErrors, validate } from '../settings/validate.ts';
 import { createEffectRunner, type Effects } from './effects.ts';
@@ -45,6 +45,9 @@ export interface SimControls {
   setLowFps(on: boolean): void;
   lowFps(): boolean;
   dropCamera(): void;
+  /** Every camera start fails with this kind until cleared. */
+  setCameraFailure(kind: CameraError['kind'] | null): void;
+  cameraFailure(): CameraError['kind'] | null;
 }
 
 export interface AppStore {
