@@ -23,10 +23,11 @@ export default defineConfig((env) =>
       coverage: {
         provider: 'v8',
         include: ['src/**/*.{ts,tsx}'],
-        exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/main.tsx', 'src/env.d.ts'],
+        exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/**/test/**', 'src/main.tsx', 'src/env.d.ts'],
         reporter: ['text-summary', 'html'],
-        // Spec §5.4: ≥ 90 % lines on the pure core (engine/ joins in M4).
+        // Spec §5.4: ≥ 90 % lines on the pure core.
         thresholds: {
+          'src/engine/**': { lines: 90 },
           'src/session/**': { lines: 90 },
           'src/settings/**': { lines: 90 },
           'src/app/machine.ts': { lines: 90 },
