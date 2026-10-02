@@ -63,7 +63,7 @@ export function Session() {
     <div className="flex h-screen-d flex-col overflow-hidden">
       <TopBar />
       <main className="mx-auto grid min-h-0 w-full max-w-[1040px] flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto] [grid-template-areas:'head'_'list'_'actions'] md:grid-cols-2 md:grid-rows-[minmax(0,1fr)_auto] md:[grid-template-areas:'head_list'_'actions_list'] landscape:grid-cols-2 landscape:grid-rows-[minmax(0,1fr)_auto] landscape:[grid-template-areas:'head_list'_'actions_list']">
-        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-safe pt-4 [grid-area:head]">
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-safe pt-4 [grid-area:head] short:gap-2 short:pt-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <StatusChip kind={status.kind} />
             <span className="font-semibold text-text">{status.text}</span>

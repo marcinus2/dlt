@@ -44,7 +44,8 @@
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --text-lap-hero: clamp(4.5rem, 24vw, 12rem);
+  /* Sized to its column (an inline-size container), so two-column layouts fit. */
+  --text-lap-hero: clamp(4.5rem, 24cqi, 12rem);
   --text-lap-hero--line-height: 1;
   --text-lap-row: 1.75rem;
   --text-lap-row--line-height: 1;
@@ -58,6 +59,9 @@
   --shadow-glow-danger: 0 0 24px color-mix(in srgb, var(--color-danger-glow) 40%, transparent);
   --shadow-glow-best: 0 0 24px color-mix(in srgb, var(--color-best) 40%, transparent);
 }
+
+/* Short viewports (landscape phones): tighter vertical sizes. */
+@custom-variant short (@media (max-height: 500px));
 
 /* Safe-area helpers (spec §2.5). */
 @utility pt-safe {

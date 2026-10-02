@@ -52,7 +52,7 @@ export function GetReady() {
     <>
       <TopBar />
       <main className="mx-auto flex min-h-0 w-full max-w-[480px] flex-1 flex-col items-center gap-4 px-safe py-4 landscape:max-w-[1040px] landscape:flex-row landscape:justify-center landscape:gap-8">
-        <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3 landscape:max-w-[640px]">
+        <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3 landscape:max-w-[640px] landscape:self-stretch">
           {error ? (
             <CameraErrorCard error={error} onRetry={() => dispatch({ type: 'RETRY' })} />
           ) : (

@@ -9,7 +9,7 @@ import { KeyHint } from './KeyHint.tsx';
 export function ActionBar({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={cx('px-safe pb-safe-bar pt-3', className)}>
-      <div className="flex h-28 gap-4 landscape:max-md:h-24">{children}</div>
+      <div className="flex h-28 gap-4 short:h-24">{children}</div>
     </div>
   );
 }

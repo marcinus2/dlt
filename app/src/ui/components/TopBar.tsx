@@ -21,7 +21,7 @@ function NavItem({
       aria-current={current ? 'page' : undefined}
       onClick={onClick}
       className={cx(
-        'inline-flex min-h-12 items-center gap-2 rounded-full px-3 text-[18px] font-semibold',
+        'inline-flex min-h-12 items-center gap-2 rounded-full px-3 text-[18px] font-semibold whitespace-nowrap max-[380px]:gap-1.5 max-[380px]:px-2',
         current ? 'text-accent' : 'text-text hover:bg-surface-2',
       )}
     >
@@ -41,7 +41,7 @@ function SaveItem() {
       disabled={!valid}
       onClick={() => dispatch({ type: 'SAVE' })}
       className={cx(
-        'inline-flex min-h-12 items-center gap-2 rounded-full px-4 text-[18px] font-semibold disabled:opacity-40',
+        'inline-flex min-h-12 items-center gap-2 rounded-full px-4 text-[18px] font-semibold whitespace-nowrap disabled:opacity-40',
         dirty && valid ? 'bg-accent text-accent-ink shadow-glow-accent' : 'text-text hover:bg-surface-2',
       )}
     >
@@ -57,8 +57,11 @@ export function TopBar({ children }: { children?: ReactNode }) {
   const dispatch = useApp((s) => s.dispatch);
   const sim = useApp((s) => s.sim !== null);
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-surface pt-safe">
-      <nav aria-label="Main" className="mx-auto flex min-h-16 max-w-[1040px] items-center gap-2 px-safe">
+    <header className="sticky top-0 z-20 border-b border-border bg-surface pt-safe md:flex md:items-center landscape:flex landscape:items-center">
+      <nav
+        aria-label="Main"
+        className="mx-auto flex min-h-16 max-w-[1040px] items-center gap-2 px-safe short:min-h-12 md:flex-1 landscape:flex-1"
+      >
         <NavItem
           icon={Flag}
           label="New session"
@@ -73,7 +76,7 @@ export function TopBar({ children }: { children?: ReactNode }) {
         )}
       </nav>
       {sim && (
-        <Suspense fallback={<div className="h-14 border-t border-warn/40" />}>
+        <Suspense fallback={null}>
           <SimBar />
         </Suspense>
       )}

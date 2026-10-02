@@ -133,8 +133,8 @@ export default function SimPanel() {
 
   if (!sim) return null;
   return (
-    <div className="relative border-t border-warn/40 bg-warn/5">
-      <div className="mx-auto flex h-14 max-w-[1040px] items-center gap-2 px-safe">
+    <div className="relative border-t border-warn/40 bg-warn/5 md:border-t-0 landscape:border-t-0 md:bg-transparent landscape:bg-transparent">
+      <div className="mx-auto flex h-14 max-w-[1040px] items-center gap-2 px-safe short:h-12 md:pl-0 landscape:pl-0">
         <button
           type="button"
           aria-expanded={open}
@@ -144,7 +144,7 @@ export default function SimPanel() {
           SIMULATED
           <ChevronDown aria-hidden size={16} className={cx('transition-transform', open && 'rotate-180')} />
         </button>
-        <span className="hidden truncate text-sm text-text-muted sm:inline">
+        <span className="hidden truncate text-sm text-text-muted sm:inline md:hidden landscape:hidden">
           No real detection — passes come from here
         </span>
         <button
@@ -158,7 +158,7 @@ export default function SimPanel() {
         </button>
       </div>
       {open && (
-        <div className="absolute left-2 top-full z-30 mt-1">
+        <div className="absolute top-full right-2 z-30 mt-1 md:right-auto md:left-0 landscape:right-auto landscape:left-0">
           <Panel sim={sim} />
         </div>
       )}

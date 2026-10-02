@@ -19,13 +19,13 @@ export function LapHero({ session }: { session: SessionData }) {
   const running = timing.kind === 'running';
 
   return (
-    <section aria-label="Latest lap" className="relative">
+    <section aria-label="Latest lap" className="@container relative">
       <p className="sr-only" aria-live="polite">
         {latest ? liveText(latest.n, latest.ms, isBest) : ''}
       </p>
       <div
         aria-hidden
-        className="flex h-8 items-center gap-3 text-lg font-extrabold tracking-wider text-text uppercase"
+        className="flex h-8 items-center gap-3 text-lg font-extrabold tracking-wider text-text uppercase short:h-7"
       >
         {latest ? `Lap ${latest.n}` : 'Lap 1'}
         {isBest && <BestBadge />}
@@ -47,14 +47,17 @@ export function LapHero({ session }: { session: SessionData }) {
           transition={T_LAP}
           data-testid="lap-hero"
           className={cx(
-            'relative font-mono text-lap-hero font-extrabold whitespace-nowrap landscape:max-md:text-[clamp(3.5rem,30dvh,8rem)]',
+            'relative font-mono text-lap-hero font-extrabold whitespace-nowrap short:text-[clamp(3rem,min(24cqi,20dvh),8rem)]',
             isBest ? 'text-best' : latest ? 'text-text' : 'text-text-muted',
           )}
         >
           {latest ? formatLap(latest.ms) : '--.--'}
         </m.div>
       </div>
-      <p className="mt-2 flex h-8 items-center text-xl font-semibold text-text" data-testid="lap-summary">
+      <p
+        className="mt-2 flex h-8 items-center text-xl font-semibold text-text short:mt-1 short:h-7"
+        data-testid="lap-summary"
+      >
         {laps.length > 0 ? (
           <>
             Laps {laps.length}
