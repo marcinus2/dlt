@@ -1,11 +1,13 @@
-import { Bug, ChevronDown, FlaskConical, RotateCcw } from 'lucide-react';
+import { Bug, ChevronDown, FlaskConical, RotateCcw, Volume2 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import type { Settings } from '../../engine/types.ts';
+import type { Cue } from '../../session/types.ts';
 import { GROUPS, type Group, getSetting, SCHEMA } from '../../settings/schema.ts';
 import { isDefault } from '../../settings/validate.ts';
 import { roiPreset, SettingField } from '../components/SettingField.tsx';
 import { TopBar } from '../components/TopBar.tsx';
 import { cx } from '../cx.ts';
+import { SpeechLatencyHud } from '../debug/Hud.tsx';
 import { useApp } from '../store.tsx';
 import { UpdateToast } from './UpdateToast.tsx';
 
@@ -101,6 +103,40 @@ function Fields({ group, advanced }: { group: Group; advanced: boolean }) {
   ));
 }
 
+const SOUND_CHECK: { cue: Cue; label: string }[] = [
+  { cue: 'armed', label: 'Armed' },
+  { cue: 'go', label: 'Go' },
+  { cue: 'lap', label: 'Lap' },
+  { cue: 'best', label: 'Best' },
+  { cue: 'paused', label: 'Paused' },
+];
+
+/** Diagnostics: play each cue with the draft audio toggles (plan 6.2). */
+function SoundCheck() {
+  const testCue = useApp((s) => s.testCue);
+  return (
+    <div className="my-3 flex flex-col gap-2">
+      <p className="flex items-center gap-2 font-semibold text-text">
+        <Volume2 aria-hidden size={20} className="text-accent" />
+        Sound check
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {SOUND_CHECK.map(({ cue, label }) => (
+          <button
+            key={cue}
+            type="button"
+            onClick={() => testCue(cue)}
+            className="min-h-12 rounded-full border border-border px-4 font-semibold text-text hover:bg-surface-2"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <SpeechLatencyHud />
+    </div>
+  );
+}
+
 function Placeholder({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <div className="my-3 flex items-start gap-3 rounded-card border border-dashed border-border bg-surface-2 px-4 py-3 text-text-muted">
@@ -117,6 +153,7 @@ export function Configuration() {
   const errorCount = useApp((s) => Object.keys(s.errors).length);
   const resetDraft = useApp((s) => s.resetDraft);
   const debug = useApp((s) => s.debug);
+  const voiceAvailable = useApp((s) => s.ui.voiceAvailable);
 
   return (
     <>
@@ -149,6 +186,11 @@ export function Configuration() {
                   </button>
                 </Placeholder>
               )}
+              {g.id === 'audio' && !voiceAvailable && (
+                <p role="status" className="mt-3 text-sm font-semibold text-warn">
+                  Voice not available on this device — beeps only.
+                </p>
+              )}
               <Fields group={g.id} advanced={false} />
               {hasAdvanced && (
                 <Disclosure title="Advanced" level="advanced">
@@ -160,6 +202,7 @@ export function Configuration() {
         })}
         {debug && (
           <Disclosure title="Diagnostics" summary="debug">
+            <SoundCheck />
             <Placeholder icon={<Bug aria-hidden size={22} className="mt-0.5 shrink-0 text-accent" />}>
               <p className="font-semibold text-text">Ratio graph, diff view, HUD, event log</p>
               <p className="text-sm">File replay and CSV export arrive with the engine port.</p>

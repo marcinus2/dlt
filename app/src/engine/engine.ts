@@ -145,7 +145,13 @@ export function createDetectorEngine(opts: EngineOptions): Engine {
     if (my !== run) return;
     for (const e of events) {
       if (e.type !== 'MOTION_END') continue;
-      const pass: PassEvent = { startT: e.startT, endT: e.endT, peakT: e.peakT, peakRatio: e.peakRatio };
+      const pass: PassEvent = {
+        t: e.t,
+        startT: e.startT,
+        endT: e.endT,
+        peakT: e.peakT,
+        peakRatio: e.peakRatio,
+      };
       for (const cb of ls.pass) {
         cb(pass);
         if (my !== run) return;

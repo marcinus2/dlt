@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  AudioSettings,
   CameraError,
   CameraInfo,
   CameraSettings,
@@ -11,13 +12,21 @@ import type {
 } from '../engine/types.ts';
 import { DEFAULTS, setSetting } from '../settings/schema.ts';
 import { createSettingsStorage, memoryBackend } from '../settings/storage.ts';
-import { type Effects, lowFpsTracker, STATS_INTERVAL_MS, toCameraError } from './effects.ts';
+import {
+  type Effects,
+  latencyWindow,
+  lowFpsTracker,
+  SAMPLE_LAP_MS,
+  STATS_INTERVAL_MS,
+  toCameraError,
+} from './effects.ts';
 import { initialState } from './machine.ts';
 import { createAppStore, STORAGE_TOAST } from './store.ts';
 
 const info: CameraInfo = { width: 240, height: 480, fps: 30, facing: 'user' };
 const stats: EngineStats = { fps: 30, deliveredFps: 30, dropped: 0, msPerFrame: 6, ratio: 0, tSource: 'now' };
 const pass = (startT: number): PassEvent => ({
+  t: startT + 200,
   startT,
   endT: startT + 200,
   peakT: startT + 100,
@@ -33,6 +42,9 @@ function fakeEffects() {
   const started: DetectionSettings[] = [];
   const updated: DetectionSettings[] = [];
   let engineStats = stats;
+  const speechStarts: ((() => void) | undefined)[] = [];
+  const cueSettings: AudioSettings[] = [];
+  let lockCb: ((locked: boolean) => void) | null = null;
 
   const engine = {
     start: (_src: unknown, s: DetectionSettings) => {
@@ -74,7 +86,18 @@ function fakeEffects() {
     engine,
     audio: {
       unlock: () => log.push('audio.unlock'),
-      cue: (c, ms) => log.push(`cue:${c}${ms ? `:${ms}` : ''}`),
+      cue: (c, ms, s, onSpeechStart) => {
+        log.push(`cue:${c}${ms ? `:${ms}` : ''}`);
+        cueSettings.push(s);
+        speechStarts.push(onSpeechStart);
+        return { tone: c, text: '' };
+      },
+      onLockChange: (cb) => {
+        lockCb = cb;
+        return () => {};
+      },
+      onVoiceChange: () => () => {},
+      voiceAvailable: () => true,
     },
     wakeLock: { acquire: () => log.push('wakeLock.acquire'), release: () => log.push('wakeLock.release') },
     settings: { load: storage.load, save: (s) => (saveFails ? false : storage.save(s)) },
@@ -100,6 +123,9 @@ function fakeEffects() {
       for (const cb of [...listeners.phase]) cb(p);
     },
     passListeners: () => [...listeners.pass],
+    speechStarts,
+    cueSettings,
+    setLocked: (locked: boolean) => lockCb?.(locked),
     endTrack: (e: CameraError) => ended?.(e),
     resolveCamera: async (i = info) => {
       pending?.resolve(i);
@@ -331,6 +357,61 @@ describe('store + effect runner', () => {
     expect(f.started).toEqual([DEFAULTS.detection]);
     expect(store.getState().state).toBe(live);
     expect(store.getState().state.configDirty).toBe(false);
+  });
+});
+
+describe('audio wiring (M6)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('cues get the saved audio settings', async () => {
+    const { f } = await inSession();
+    expect(f.cueSettings).toEqual([DEFAULTS.audio]);
+  });
+
+  it('speech start after a pass reports MOTION_END → onstart latency; armed has no probe', async () => {
+    const { f, store } = await inSession();
+    expect(f.speechStarts).toEqual([undefined]);
+    vi.setSystemTime(0);
+    const t = performance.now();
+    f.emitPass({ ...pass(1000), t: t - 50 });
+    vi.advanceTimersByTime(250);
+    f.speechStarts.at(-1)?.();
+    expect(store.getState().ui.speechLatency).toEqual({ last: 300, p90: 300, n: 1 });
+  });
+
+  it('lock changes reach ui.audioLocked; the banner tap unlocks inside the gesture', () => {
+    const { f, store } = setup();
+    f.setLocked(true);
+    expect(store.getState().ui.audioLocked).toBe(true);
+    store.getState().unlockAudio();
+    expect(f.log).toEqual(['audio.unlock']);
+    f.setLocked(false);
+    expect(store.getState().ui.audioLocked).toBe(false);
+  });
+
+  it('sound check unlocks, then plays with the draft toggles and a sample lap', () => {
+    const { f, store } = setup();
+    store.getState().setDraft('audio.voice', false);
+    store.getState().testCue('best');
+    store.getState().testCue('go');
+    expect(f.log).toEqual(['audio.unlock', `cue:best:${SAMPLE_LAP_MS}`, 'audio.unlock', 'cue:go']);
+    expect(f.cueSettings[0]).toEqual({ ...DEFAULTS.audio, voice: false });
+  });
+});
+
+describe('latencyWindow', () => {
+  it('p90 by nearest rank over the last 20 samples', () => {
+    const w = latencyWindow();
+    let r = w.add(100);
+    expect(r).toEqual({ last: 100, p90: 100, n: 1 });
+    for (let i = 1; i <= 30; i++) r = w.add(i * 10);
+    // Last 20: 110..300 → rank ceil(18) = 18th = 280.
+    expect(r).toEqual({ last: 300, p90: 280, n: 20 });
   });
 });
 

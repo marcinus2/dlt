@@ -136,7 +136,7 @@ describe('DetectorEngine', () => {
     warm();
     feed(pass);
     expect(events.map((e) => e.type)).toEqual(['MOTION_START', 'MOTION_END']);
-    expect(passes).toEqual([{ startT: 700, endT: 900, peakT: 700, peakRatio: HI }]);
+    expect(passes).toEqual([{ t: 900, startT: 700, endT: 900, peakT: 700, peakRatio: HI }]);
     expect(phases).toEqual(['warmup', 'armed', 'motion', 'armed']);
   });
 

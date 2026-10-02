@@ -24,7 +24,7 @@ const STANDBY: AppEvent[] = [...ARMING, { type: 'ARMED' }];
 function laps(...secs: number[]): AppEvent[] {
   const pass = (startT: number): AppEvent => ({
     type: 'PASS',
-    pass: { startT, endT: startT + 180, peakT: startT + 90, peakRatio: 0.1 },
+    pass: { t: startT + 180, startT, endT: startT + 180, peakT: startT + 90, peakRatio: 0.1 },
   });
   let t = 10_000;
   const events = [pass(t)];

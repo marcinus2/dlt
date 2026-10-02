@@ -61,7 +61,7 @@ export function replay(rows: readonly FrameRow[], settings: DetectorSettings): R
     for (const e of det.update(row)) {
       events.push(e);
       if (e.type !== 'MOTION_END') continue;
-      passes.push({ startT: e.startT, endT: e.endT, peakT: e.peakT, peakRatio: e.peakRatio });
+      passes.push({ t: e.t, startT: e.startT, endT: e.endT, peakT: e.peakT, peakRatio: e.peakRatio });
       session = applyPass(session, e.startT).session;
     }
   }

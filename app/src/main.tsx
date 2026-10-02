@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createRealEffects } from './app/real.ts';
 import { type AppStoreApi, createAppStore, type StoreOptions } from './app/store.ts';
+import { createAnnouncer } from './audio/announcer.ts';
 import { createSettingsStorage, memoryBackend } from './settings/storage.ts';
 import { App } from './ui/App.tsx';
 import { StoreProvider } from './ui/store.tsx';
@@ -34,6 +35,7 @@ async function boot(): Promise<AppStoreApi> {
   // Sim-only flags: `?cam=fake` placeholder camera, `?auto=0`, `?lap=<s>`.
   const { effects, controls } = createSim({
     settings: createSettingsStorage(gallery ? memoryBackend() : undefined),
+    audio: createAnnouncer(),
     realCamera: !gallery && params.get('cam') !== 'fake',
     lapMs: lap > 0 ? lap * 1000 : undefined,
     auto: !gallery && params.get('auto') !== '0',

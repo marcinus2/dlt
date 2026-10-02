@@ -89,6 +89,8 @@ export type DetectorEvent =
 
 /** An accepted, finished pass (from MOTION_END). The only thing the lap logic consumes. */
 export interface PassEvent {
+  /** Frame time the pass was reported (MOTION_END `t`); the speech latency probe starts here. */
+  t: Ms;
   startT: Ms;
   endT: Ms;
   peakT: Ms;
