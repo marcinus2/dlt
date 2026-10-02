@@ -17,7 +17,7 @@ Any other dependency needs a reason in the PR. Allowed test-only additions: `@ax
 - `npm run lint` (`biome ci`) · `npm run format` · `npm run typecheck` · `npm test` (Vitest) · `npm run size` (≤ 130 KB gz initial JS)
 - `npm run test:e2e` (Playwright, needs a build). On macOS 14 the local WebKit is frozen and fails; use `--project=chromium` locally, WebKit runs in CI.
 - CI = `lint → typecheck → test --coverage → build:pages → size → e2e`; every push to `main` deploys to GitHub Pages; manual `workflow_dispatch` deploys any branch.
-- URL flags: `?gallery` / `?state=<preset>` (state gallery, `src/ui/gallery/presets.ts`), `?cam=fake` (placeholder camera), `?auto=0`, `?lap=<s>`, `?debug=1`. E2E uses `?cam=fake&auto=0`; WebKit runs only `smoke` + `gallery` specs.
+- URL flags: `?gallery` / `?state=<preset>` (state gallery, `src/ui/gallery/presets.ts`), `?cam=fake` (placeholder camera), `?auto=0`, `?lap=<s>`, `?debug=1`, `?debug=engine` (real-engine debug page: camera/file replay, HUD, CSV export). E2E uses `?cam=fake&auto=0`; WebKit runs only `smoke` + `gallery` specs.
 
 ## Module boundaries (spec §5.1, enforced by Biome `noRestrictedImports` / `noRestrictedGlobals`)
 

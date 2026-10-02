@@ -38,7 +38,15 @@ async function boot(): Promise<AppStoreApi> {
   return store;
 }
 
-if (params.has('gallery')) {
+if (params.get('debug') === 'engine') {
+  // Engine debug page (plan 4.10): real camera / file → engine, saved settings. Lazy chunk.
+  Promise.all([import('./app/debug-rig.ts'), import('./ui/debug/DebugPage.tsx')]).then(
+    ([{ createDebugRig }, { DebugPage }]) => {
+      const rig = createDebugRig(createSettingsStorage().load());
+      reactRoot.render(<DebugPage rig={rig} />);
+    },
+  );
+} else if (params.has('gallery')) {
   import('./ui/gallery/Gallery.tsx').then(({ Gallery }) => reactRoot.render(<Gallery />));
 } else {
   boot().then((store) => {
