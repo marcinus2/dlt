@@ -1,0 +1,46 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden replays > synthetic/laps-30fps.csv 1`] = `
+{
+  "bestIdx": 2,
+  "events": [
+    "MOTION_START@2033.333",
+    "MOTION_END@2300",
+    "MOTION_START@7333.333",
+    "MOTION_END@7600",
+    "SUPPRESSED@7933.333",
+    "MOTION_START@12500",
+    "MOTION_END@12766.667",
+    "MOTION_START@17066.667",
+    "MOTION_END@17333.333",
+    "MOTION_START@20000",
+    "REJECTED@23033.333",
+    "MOTION_START@28033.333",
+    "MOTION_END@28300",
+    "MOTION_START@33133.333",
+    "MOTION_END@33400",
+  ],
+  "laps": [
+    {
+      "ms": 5300,
+      "n": 1,
+    },
+    {
+      "ms": 5166.667,
+      "n": 2,
+    },
+    {
+      "ms": 4566.667,
+      "n": 3,
+    },
+    {
+      "ms": 10966.666,
+      "n": 4,
+    },
+    {
+      "ms": 5100,
+      "n": 5,
+    },
+  ],
+}
+`;

@@ -1,7 +1,7 @@
 // Effect runner: executes reducer effects against injected implementations
 // (real engine from M5, sim/ before). Gesture-bound effects run synchronously.
+import { toCameraError } from '../engine/camera-error.ts';
 import type {
-  CameraError,
   CameraInfo,
   CameraSettings,
   DetectorEngine,
@@ -40,6 +40,8 @@ export interface RunnerHost {
   stats(stats: EngineStats | null, lowFps: boolean): void;
 }
 
+export { toCameraError };
+
 export const STATS_INTERVAL_MS = 500; // ≤ 4 Hz store updates
 export const LOW_FPS = 20;
 export const LOW_FPS_HOLD_MS = 2000;
@@ -57,26 +59,6 @@ export function lowFpsTracker() {
       since = null;
     },
   };
-}
-
-const ERROR_KINDS: Record<string, CameraError['kind']> = {
-  NotAllowedError: 'permission',
-  SecurityError: 'permission',
-  NotFoundError: 'notFound',
-  NotReadableError: 'busy',
-  AbortError: 'busy',
-  OverconstrainedError: 'overconstrained',
-};
-
-/** CameraError as-is; DOMException-like errors mapped by name. */
-export function toCameraError(err: unknown): CameraError {
-  if (typeof err === 'object' && err !== null) {
-    const e = err as { kind?: unknown; name?: unknown; message?: unknown };
-    const message = typeof e.message === 'string' ? e.message : String(err);
-    if (typeof e.kind === 'string') return { kind: e.kind as CameraError['kind'], message };
-    if (typeof e.name === 'string') return { kind: ERROR_KINDS[e.name] ?? 'unknown', message };
-  }
-  return { kind: 'unknown', message: String(err) };
 }
 
 export function createEffectRunner(fx: Effects, host: RunnerHost) {

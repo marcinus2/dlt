@@ -114,6 +114,9 @@ export interface CameraInfo {
   height: number;
   fps: number | null;
   facing?: string;
+  deviceId?: string;
+  /** fpsExact could not be met; the camera runs at an `ideal` frame rate instead. */
+  fpsFallback?: boolean;
 }
 
 export interface FrameSource {
