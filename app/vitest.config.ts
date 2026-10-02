@@ -25,6 +25,12 @@ export default defineConfig((env) =>
         include: ['src/**/*.{ts,tsx}'],
         exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/main.tsx', 'src/env.d.ts'],
         reporter: ['text-summary', 'html'],
+        // Spec §5.4: ≥ 90 % lines on the pure core (engine/ joins in M4).
+        thresholds: {
+          'src/session/**': { lines: 90 },
+          'src/settings/**': { lines: 90 },
+          'src/app/machine.ts': { lines: 90 },
+        },
       },
     },
   }),
