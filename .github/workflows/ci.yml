@@ -23,8 +23,8 @@ jobs:
       run:
         working-directory: drone-lap-poc
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: app/.nvmrc
           cache: npm
@@ -39,8 +39,8 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: app/.nvmrc
           cache: npm
@@ -65,13 +65,13 @@ jobs:
       - name: E2E
         run: npm run test:e2e
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: app/playwright-report
           retention-days: 7
       - if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: app/dist
 
@@ -91,4 +91,4 @@ jobs:
       cancel-in-progress: false
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

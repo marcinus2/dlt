@@ -22,7 +22,9 @@ while (queue.length > 0) {
   if (seen.has(file)) continue;
   seen.add(file);
   const code = readFileSync(join(dist, file), 'utf8');
-  for (const m of code.matchAll(/(?:^|[;}\s])(?:import|export)\s*(?:[\w*{}\s,$]+from\s*)?["'](\.{1,2}\/[^"']+\.js)["']/g)) {
+  for (const m of code.matchAll(
+    /(?:^|[;}\s])(?:import|export)\s*(?:[\w*{}\s,$]+from\s*)?["'](\.{1,2}\/[^"']+\.js)["']/g,
+  )) {
     queue.push(normalize(join(dirname(file), m[1])));
   }
 }
@@ -34,5 +36,7 @@ for (const file of [...seen].sort()) {
   console.log(`${kb.toFixed(1).padStart(7)} KB  ${file}`);
 }
 const ok = total <= BUDGET_KB;
-console.log(`${total.toFixed(1).padStart(7)} KB  initial JS (gzip), budget ${BUDGET_KB} KB → ${ok ? 'OK' : 'OVER'}`);
+console.log(
+  `${total.toFixed(1).padStart(7)} KB  initial JS (gzip), budget ${BUDGET_KB} KB → ${ok ? 'OK' : 'OVER'}`,
+);
 process.exit(ok ? 0 : 1);
