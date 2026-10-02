@@ -57,6 +57,49 @@ describe('App', () => {
   });
 });
 
+describe('audio UI (M6)', () => {
+  const inSession = (opts: { audioLocked?: boolean; unlock?: () => void } = {}) => {
+    const fx = noopEffects();
+    if (opts.unlock) fx.audio.unlock = opts.unlock;
+    const state = reduce(reduce(initialState, { type: 'GET_READY' }).state, { type: 'CAMERA_LIVE' }).state;
+    const store = testStore({
+      effects: fx,
+      state: reduce(state, { type: 'START' }).state,
+      ui: { audioLocked: opts.audioLocked ?? false },
+    });
+    renderWithStore(<App />, store);
+    return store;
+  };
+
+  it('locked audio → "Tap to enable sound"; the tap unlocks inside the handler', () => {
+    let unlocks = 0;
+    const store = inSession({ audioLocked: true, unlock: () => unlocks++ });
+    fireEvent.click(screen.getByRole('button', { name: 'Tap to enable sound' }));
+    expect(unlocks).toBe(1);
+    act(() => store.getState().setUi({ audioLocked: false }));
+    expect(screen.queryByRole('button', { name: 'Tap to enable sound' })).toBeNull();
+  });
+
+  it('no banner when beeps and voice are both off', () => {
+    const fx = noopEffects();
+    fx.settings.save({ ...fx.settings.load(), audio: { beep: false, voice: false, announceBest: true } });
+    const state = reduce(reduce(initialState, { type: 'GET_READY' }).state, { type: 'CAMERA_LIVE' }).state;
+    const store = testStore({ effects: fx, state: reduce(state, { type: 'START' }).state });
+    renderWithStore(<App />, store);
+    act(() => store.getState().setUi({ audioLocked: true }));
+    expect(screen.queryByRole('button', { name: 'Tap to enable sound' })).toBeNull();
+  });
+
+  it('Configuration says when no voice is available', () => {
+    const store = testStore();
+    renderWithStore(<App />, store);
+    act(() => store.getState().dispatch({ type: 'NAV_CONFIG' }));
+    expect(screen.queryByText(/Voice not available/)).toBeNull();
+    act(() => store.getState().setUi({ voiceAvailable: false }));
+    expect(screen.getByText(/Voice not available/)).toBeTruthy();
+  });
+});
+
 describe('primaryEvent (Space / Enter)', () => {
   it('maps the visible primary action per screen', () => {
     const r = (s = initialState, ...es: Parameters<typeof reduce>[1][]) =>

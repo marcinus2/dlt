@@ -6,7 +6,13 @@ const err: CameraError = { kind: 'permission', message: 'denied' };
 const lost: CameraError = { kind: 'ended', message: 'track ended' };
 const pass = (startT: number): AppEvent => ({
   type: 'PASS',
-  pass: { startT, endT: startT + 200, peakT: startT + 100, peakRatio: 0.1 } satisfies PassEvent,
+  pass: {
+    t: startT + 200,
+    startT,
+    endT: startT + 200,
+    peakT: startT + 100,
+    peakRatio: 0.1,
+  } satisfies PassEvent,
 });
 
 /** Runs events from `s` and returns the final state plus the effects of the last event. */

@@ -79,7 +79,9 @@ describe('SimEngine', () => {
     expect(events).toEqual([{ type: 'MOTION_START', t: 2000, dStart: null }]);
     expect(passes).toEqual([]); // recorded at MOTION_END (D1)
     clock.advance(SIM_MOTION_MS);
-    expect(passes).toEqual([{ startT: 2000, endT: 2000 + SIM_MOTION_MS, peakT: 2090, peakRatio: 0.125 }]);
+    expect(passes).toEqual([
+      { t: 2000 + SIM_MOTION_MS, startT: 2000, endT: 2000 + SIM_MOTION_MS, peakT: 2090, peakRatio: 0.125 },
+    ]);
     expect(events.at(-1)).toMatchObject({ type: 'MOTION_END', startT: 2000, durationMs: SIM_MOTION_MS });
     expect(engine.phase()).toBe('armed');
   });

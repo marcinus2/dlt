@@ -140,7 +140,7 @@ export function createSimEngine(opts: SimEngineOptions = {}): SimEngine {
         dPeak: dStart,
       });
       setPhase('armed');
-      emit(ls.pass, { startT: t0, endT, peakT, peakRatio });
+      emit(ls.pass, { t: endT, startT: t0, endT, peakT, peakRatio });
     });
   }
 

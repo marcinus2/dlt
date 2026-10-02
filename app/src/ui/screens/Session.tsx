@@ -7,6 +7,7 @@ import { LapList } from '../components/LapList.tsx';
 import { type ChipKind, StatusChip, WarnChip } from '../components/StatusChip.tsx';
 import { TopBar } from '../components/TopBar.tsx';
 import { lapsText, pauseBanner } from '../copy.ts';
+import { SpeechLatencyHud } from '../debug/Hud.tsx';
 import { useApp } from '../store.tsx';
 
 function chip(session: SessionData, paused: boolean): { kind: ChipKind; text: string } {
@@ -19,9 +20,10 @@ function chip(session: SessionData, paused: boolean): { kind: ChipKind; text: st
 function Banners({ paused }: { paused: boolean }) {
   const reason = useApp((s) => s.state.pauseReason);
   const camera = useApp((s) => s.state.camera);
-  const audioLocked = useApp((s) => s.ui.audioLocked);
+  const audioLocked = useApp((s) => s.ui.audioLocked && (s.saved.audio.beep || s.saved.audio.voice));
   const wakeLockBanner = useApp((s) => s.ui.wakeLockBanner);
   const setUi = useApp((s) => s.setUi);
+  const unlockAudio = useApp((s) => s.unlockAudio);
   const pause = paused ? pauseBanner(reason, typeof camera === 'object' ? camera.error : null) : null;
   if (!pause && !audioLocked && !wakeLockBanner) return null;
   return (
@@ -36,8 +38,8 @@ function Banners({ paused }: { paused: boolean }) {
           tone="warn"
           icon={Volume2}
           title="Sound is off"
-          // M6: the tap resumes the AudioContext.
-          action={{ label: 'Tap to enable sound', onClick: () => setUi({ audioLocked: false }) }}
+          // The tap resumes the AudioContext; the banner goes once it runs.
+          action={{ label: 'Tap to enable sound', onClick: unlockAudio }}
         />
       )}
       {wakeLockBanner && (
@@ -54,6 +56,7 @@ export function Session() {
   const screen = useApp((s) => s.state.screen);
   const session = useApp((s) => s.state.session);
   const lowFps = useApp((s) => s.ui.lowFps);
+  const debug = useApp((s) => s.debug);
   const dispatch = useApp((s) => s.dispatch);
   if (!session) return null;
   const paused = screen === 'paused';
@@ -69,6 +72,7 @@ export function Session() {
             <span className="font-semibold text-text">{status.text}</span>
             {lowFps && !paused && <WarnChip>Low frame rate — passes may be missed</WarnChip>}
           </div>
+          {debug && <SpeechLatencyHud />}
           <Banners paused={paused} />
           <LapHero session={session} />
         </div>

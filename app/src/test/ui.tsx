@@ -33,7 +33,13 @@ export function noopEffects(opts: { cameraLive?: CameraInfo } = {}): Effects {
       onEnded: () => () => {},
     },
     engine,
-    audio: { unlock() {}, cue() {} },
+    audio: {
+      unlock() {},
+      cue: () => ({ tone: null, text: '' }),
+      onLockChange: () => () => {},
+      onVoiceChange: () => () => {},
+      voiceAvailable: () => true,
+    },
     wakeLock: { acquire() {}, release() {} },
     settings: createSettingsStorage(memoryBackend()),
   };

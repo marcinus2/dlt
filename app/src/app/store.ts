@@ -4,8 +4,8 @@ import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { CameraError, CameraInfo, EngineStats, Settings } from '../engine/types.ts';
 import { DEFAULTS, type SettingKey, setSetting } from '../settings/schema.ts';
 import { equalSettings, type SettingErrors, validate } from '../settings/validate.ts';
-import { createEffectRunner, type Effects } from './effects.ts';
-import { type AppEvent, type AppState, initialState, reduce } from './machine.ts';
+import { createEffectRunner, type Effects, type SpeechLatency } from './effects.ts';
+import { type AppEvent, type AppState, type Cue, initialState, reduce } from './machine.ts';
 
 export interface Toast {
   id: number;
@@ -19,7 +19,10 @@ export interface UiState {
   lowFps: boolean;
   cameraInfo: CameraInfo | null;
   toast: Toast | null;
-  audioLocked: boolean; // M6
+  /** AudioContext not running after an unlock: "Tap to enable sound" (spec §3.4). */
+  audioLocked: boolean;
+  voiceAvailable: boolean;
+  speechLatency: SpeechLatency | null;
   wakeLockBanner: boolean; // M8
   updateAvailable: boolean; // M9
   install: 'none' | 'prompt' | 'iosHint'; // M9
@@ -32,6 +35,8 @@ export const initialUi: UiState = {
   cameraInfo: null,
   toast: null,
   audioLocked: false,
+  voiceAvailable: true,
+  speechLatency: null,
   wakeLockBanner: false,
   updateAvailable: false,
   install: 'none',
@@ -71,6 +76,9 @@ export interface AppStore {
   showToast(text: string): void;
   dismissToast(id: number): void;
   setUi(patch: Partial<UiState>): void;
+  /** Inside a tap handler only. */
+  unlockAudio(): void;
+  testCue(cue: Cue): void;
 }
 
 export interface StoreOptions {
@@ -105,6 +113,9 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
       cameraInfo: (cameraInfo) => get().setUi({ cameraInfo }),
       passFlash: () => get().setUi({ passFlash: get().ui.passFlash + 1 }),
       stats: (stats, lowFps) => get().setUi({ stats, lowFps }),
+      audioLocked: (audioLocked) => get().setUi({ audioLocked }),
+      voiceAvailable: (voiceAvailable) => get().setUi({ voiceAvailable }),
+      speechLatency: (speechLatency) => get().setUi({ speechLatency }),
     });
     resumeLive = runner.resumeLive;
 
@@ -122,7 +133,7 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
       saved,
       draft,
       errors: validate(draft),
-      ui: { ...initialUi, ...opts.ui },
+      ui: { ...initialUi, voiceAvailable: fx.audio.voiceAvailable(), ...opts.ui },
       video: fx.camera.video,
       sim: opts.sim ?? null,
       debug: opts.debug ?? false,
@@ -141,6 +152,8 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
         if (get().ui.toast?.id === id) get().setUi({ toast: null });
       },
       setUi: (patch) => set({ ui: { ...get().ui, ...patch } }),
+      unlockAudio: runner.unlockAudio,
+      testCue: runner.testCue,
     };
   });
   return Object.assign(api, { resumeLive: () => resumeLive() });

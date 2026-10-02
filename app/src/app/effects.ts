@@ -1,5 +1,6 @@
 // Effect runner: executes reducer effects against injected implementations
 // (real engine from M5, sim/ before). Gesture-bound effects run synchronously.
+import type { Announcer } from '../audio/announcer.ts';
 import { toCameraError } from '../engine/camera-error.ts';
 import type {
   CameraInfo,
@@ -22,7 +23,7 @@ export interface CameraPort extends FrameSource {
 export interface Effects {
   camera: CameraPort;
   engine: DetectorEngine;
-  audio: { unlock(): void; cue(cue: Cue, lapMs?: Ms): void };
+  audio: Announcer;
   wakeLock: { acquire(): void; release(): void };
   settings: SettingsStorage;
 }
@@ -38,7 +39,21 @@ export interface RunnerHost {
   cameraInfo(info: CameraInfo | null): void;
   passFlash(): void;
   stats(stats: EngineStats | null, lowFps: boolean): void;
+  audioLocked(locked: boolean): void;
+  voiceAvailable(available: boolean): void;
+  speechLatency(l: SpeechLatency): void;
 }
+
+/** Speech latency probe (plan 6.6): MOTION_END frame time → utterance start. */
+export interface SpeechLatency {
+  last: Ms;
+  p90: Ms;
+  n: number;
+}
+
+export const LATENCY_WINDOW = 20;
+/** Lap time spoken by the Diagnostics sound check. */
+export const SAMPLE_LAP_MS = 12340;
 
 export { toCameraError };
 
@@ -61,16 +76,35 @@ export function lowFpsTracker() {
   };
 }
 
+/** p90 (nearest rank) over the last `size` samples. */
+export function latencyWindow(size = LATENCY_WINDOW) {
+  const xs: Ms[] = [];
+  return {
+    add(ms: Ms): SpeechLatency {
+      xs.push(ms);
+      if (xs.length > size) xs.shift();
+      const sorted = [...xs].sort((a, b) => a - b);
+      const p90 = sorted[Math.ceil(0.9 * sorted.length) - 1] ?? ms;
+      return { last: ms, p90, n: xs.length };
+    },
+  };
+}
+
 export function createEffectRunner(fx: Effects, host: RunnerHost) {
   let cameraGen = 0;
   let engineRun = 0;
   let engineSubs: Unsubscribe[] = [];
   let statsTimer: ReturnType<typeof setInterval> | null = null;
   const lowFps = lowFpsTracker();
+  const latency = latencyWindow();
+  /** MOTION_END frame time of the pass being dispatched; its cue starts the latency probe. */
+  let passT: Ms | null = null;
 
   const settingsFor = (draft?: true) => (draft ? host.draft() : host.saved());
 
   fx.camera.onEnded((error) => host.dispatch({ type: 'CAMERA_LOST', error }));
+  fx.audio.onLockChange(host.audioLocked);
+  fx.audio.onVoiceChange(host.voiceAvailable);
 
   /** New engine run: listeners of older runs drop their events. */
   function subscribe() {
@@ -80,7 +114,9 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
       fx.engine.on('pass', (pass) => {
         if (run !== engineRun) return;
         host.passFlash();
+        passT = pass.t;
         host.dispatch({ type: 'PASS', pass });
+        passT = null;
       }),
       fx.engine.on('phase', (phase) => {
         if (run === engineRun && phase === 'armed') host.dispatch({ type: 'ARMED' });
@@ -147,9 +183,12 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
       case 'audio.unlock':
         fx.audio.unlock();
         break;
-      case 'audio.cue':
-        fx.audio.cue(e.cue, e.lapMs);
+      case 'audio.cue': {
+        const t = passT;
+        const probe = t === null ? undefined : () => host.speechLatency(latency.add(performance.now() - t));
+        fx.audio.cue(e.cue, e.lapMs, host.saved().audio, probe);
         break;
+      }
       case 'wakeLock.acquire':
         fx.wakeLock.acquire();
         break;
@@ -167,6 +206,13 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
 
   return {
     run,
+    /** Banner tap (plan 6.5); inside the gesture. */
+    unlockAudio: () => fx.audio.unlock(),
+    /** Diagnostics sound check with the draft audio toggles; inside the gesture. */
+    testCue(cue: Cue) {
+      fx.audio.unlock();
+      fx.audio.cue(cue, cue === 'armed' || cue === 'go' ? undefined : SAMPLE_LAP_MS, host.draft().audio);
+    },
     /** Gallery boot into a live state: start camera + engine without dispatching. */
     resumeLive() {
       const draft = host.state().tuning ? true : undefined;
