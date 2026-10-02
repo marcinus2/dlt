@@ -1,11 +1,6 @@
-// Engine debug page (plan 4.10) on Chromium's built-in fake camera: the real
+// Engine debug page (plan 4.10) on Chromium's fake camera (playwright.config.ts): the real
 // CameraSource → FrameAnalyzer → DetectorEngine path runs, and Stop leaves nothing running.
 import { expect, test } from '@playwright/test';
-
-test.use({
-  launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] },
-  permissions: ['camera'],
-});
 
 const hudLine = async (page: import('@playwright/test').Page, key: string) =>
   ((await page.locator('pre').textContent()) ?? '').split('\n').find((l) => l.startsWith(key)) ?? '';
