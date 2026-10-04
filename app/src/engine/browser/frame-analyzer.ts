@@ -3,6 +3,7 @@
 // (DOM canvas now, OffscreenCanvas in a worker later). No per-frame allocation except
 // getImageData, which has no read-into API.
 import { type DiffOptions, diffLuma, toLuma } from '../motion-core.ts';
+import { cropRect } from '../roi.ts';
 import type { DetectionSettings, FrameAnalyzer, Roi } from '../types.ts';
 
 export const GUARD_W = 80;
@@ -65,6 +66,7 @@ export function createFrameAnalyzer(opts: AnalyzerOptions = {}): Analyzer {
   const result = { ratio: 0, globalRatio: 0, global: true };
   const timing: AnalyzerTiming = { roi: 0, diff: 0, guard: 0 };
   const size = { width: 0, height: 0 };
+  const crop = { sx: 0, sy: 0, sw: 1, sh: 1 };
 
   let ctx: AnalyzerContext | null = null;
   let gctx: AnalyzerContext | null = null;
@@ -126,10 +128,7 @@ export function createFrameAnalyzer(opts: AnalyzerOptions = {}): Analyzer {
       return neutral();
     }
     const { roi } = s;
-    const sx = Math.min(vw - 1, Math.max(0, Math.round(roi.x * vw)));
-    const sy = Math.min(vh - 1, Math.max(0, Math.round(roi.y * vh)));
-    const sw = Math.max(1, Math.min(vw - sx, Math.round(roi.width * vw)));
-    const sh = Math.max(1, Math.min(vh - sy, Math.round(roi.height * vh)));
+    const { sx, sy, sw, sh } = cropRect(roi, vw, vh, crop);
     const scale = Math.min(1, s.processingMaxSize / Math.max(sw, sh));
     const w = Math.max(1, Math.round(sw * scale));
     const h = Math.max(1, Math.round(sh * scale));

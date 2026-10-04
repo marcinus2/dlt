@@ -153,7 +153,11 @@ describe('Configuration › Camera (M7)', () => {
     const store = await open({
       cameraCaps: {
         'cam-1': { label: 'Front camera', exposure: { supported: false }, focus: { supported: false } },
-        'cam-2': { label: 'Back camera', exposure, focus: { supported: true, mode: 'continuous', value: 0.25 } },
+        'cam-2': {
+          label: 'Back camera',
+          exposure,
+          focus: { supported: true, mode: 'continuous', value: 0.25 },
+        },
       },
       lastDeviceId: 'cam-1',
     });

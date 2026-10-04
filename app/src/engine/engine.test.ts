@@ -1,7 +1,7 @@
 // DetectorEngine integration (plan 4.8): fake source (scripted FrameMeta) + fake analyzer
 // (scripted ratios), and once with the real analyzer over a fake canvas.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULTS } from '../settings/schema.ts';
+import { DEFAULTS, ROI_PRESETS } from '../settings/schema.ts';
 import { createFrameAnalyzer } from './browser/frame-analyzer.ts';
 import { createDetectorEngine, type Engine } from './engine.ts';
 import { fakeContexts, solid } from './test/fake-canvas.ts';
@@ -324,6 +324,26 @@ describe('DetectorEngine', () => {
     Object.assign(fs.video, { videoWidth: 480, videoHeight: 240 }); // rotated
     fs.frame();
     fs.frame();
+    expect(got).toEqual([true, false, true, false]);
+  });
+
+  it('with the real analyzer: a preset via update() moves the crop and resizes the buffers', () => {
+    const { factory, created } = fakeContexts();
+    const a = createFrameAnalyzer({ context: factory });
+    const e = createDetectorEngine({ analyzer: a, now: () => 0 });
+    const fs = fakeSource();
+    Object.assign(fs.video, solid(240, 480, 100));
+    const got: boolean[] = [];
+    e.on('sample', (x) => got.push(x.global));
+    e.start(fs.source, { ...s, roi: ROI_PRESETS.full });
+    fs.frame();
+    fs.frame();
+    expect(a.size).toEqual({ width: 160, height: 320 });
+    e.update({ ...s, roi: ROI_PRESETS.vLine });
+    fs.frame();
+    fs.frame();
+    expect(created[0]?.draws.at(-1)).toEqual({ sx: 102, sy: 48, sw: 36, sh: 384, dw: 30, dh: 320 });
+    expect(a.size).toEqual({ width: 30, height: 320 });
     expect(got).toEqual([true, false, true, false]);
   });
 });

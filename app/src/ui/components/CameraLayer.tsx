@@ -1,6 +1,6 @@
 // The one <video> element lives for the whole app life (iOS, spec §2.1). It sits in an
 // invisible host and moves into a CameraLayer slot while a preview is shown.
-import { type ReactNode, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cx } from '../cx.ts';
 import { useApp } from '../store.tsx';
 
@@ -24,6 +24,40 @@ export function CameraHost() {
       className="pointer-events-none fixed top-0 left-0 size-px overflow-hidden opacity-0"
     />
   );
+}
+
+export interface FrameSize {
+  width: number;
+  height: number;
+}
+
+const frameOf = (v: HTMLVideoElement): FrameSize | null =>
+  v.videoWidth > 0 && v.videoHeight > 0 ? { width: v.videoWidth, height: v.videoHeight } : null;
+
+/**
+ * Intrinsic size of the shared video: the frame the analyzer processes. Track settings can report
+ * the sensor orientation on phones, so the preview box and overlay follow this instead (plan 7.3).
+ */
+export function useVideoSize(): FrameSize | null {
+  const video = useApp((s) => s.video);
+  const [size, setSize] = useState(() => frameOf(video));
+  useEffect(() => {
+    const update = () =>
+      setSize((prev) => {
+        const next = frameOf(video);
+        return next && prev && next.width === prev.width && next.height === prev.height ? prev : next;
+      });
+    update();
+    video.addEventListener('loadedmetadata', update);
+    video.addEventListener('resize', update); // rotation, camera switch; not per frame
+    video.addEventListener('emptied', update);
+    return () => {
+      video.removeEventListener('loadedmetadata', update);
+      video.removeEventListener('resize', update);
+      video.removeEventListener('emptied', update);
+    };
+  }, [video]);
+  return size;
 }
 
 interface Props {
