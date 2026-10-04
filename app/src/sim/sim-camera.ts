@@ -1,8 +1,9 @@
 // Simulated FrameSource (plan 2.5): the real camera preview when getUserMedia works,
 // otherwise an animated canvas.captureStream() placeholder. Can simulate every CameraError
-// kind on start and a mid-session `ended`. Emits no frames (SimEngine needs none).
+// kind on start and a mid-session `ended`. Emits no frames (SimEngine needs none). The placeholder
+// lists two fake devices so the Configuration picker and capability report can be tried.
 import type { CameraPort } from '../app/effects.ts';
-import type { CameraError, CameraInfo, CameraSettings, Unsubscribe } from '../engine/types.ts';
+import type { CameraDevice, CameraError, CameraInfo, CameraSettings, Unsubscribe } from '../engine/types.ts';
 
 export interface SimCamera extends CameraPort {
   /** Every start fails with this kind until cleared (null). */
@@ -27,6 +28,11 @@ const MESSAGES: Record<CameraError['kind'], string> = {
   ended: 'Camera track ended (simulated)',
   unknown: 'Unknown camera error (simulated)',
 };
+
+export const SIM_DEVICES: readonly (CameraDevice & { facing: CameraSettings['facing'] })[] = [
+  { deviceId: 'sim-user', label: 'Simulated front camera', facing: 'user' },
+  { deviceId: 'sim-environment', label: 'Simulated rear camera', facing: 'environment' },
+];
 
 export function createSimCamera(opts: SimCameraOptions = {}): SimCamera {
   const video = document.createElement('video');
@@ -125,17 +131,26 @@ export function createSimCamera(opts: SimCameraOptions = {}): SimCamera {
         for (const t of real?.getTracks() ?? []) t.stop();
         throw { kind: 'unknown', message: 'superseded' } satisfies CameraError;
       }
-      stream = real ?? placeholder(s);
+      const device =
+        SIM_DEVICES.find((d) => d.deviceId === s.deviceId) ?? SIM_DEVICES.find((d) => d.facing === s.facing);
+      const facing = real ? s.facing : (device?.facing ?? s.facing);
+      stream = real ?? placeholder({ ...s, facing });
       const track = stream?.getVideoTracks()[0];
       track?.addEventListener('ended', () => lose({ kind: 'ended', message: 'Camera track ended' }));
       video.srcObject = stream;
       video.play().catch(() => {}); // muted autoplay; a rejected play() only delays the preview
       const ts = track?.getSettings?.() ?? {};
+      const base = { width: ts.width ?? s.width, height: ts.height ?? s.height, fps: ts.frameRate ?? s.fps };
+      if (real)
+        return { ...base, facing: ts.facingMode ?? s.facing, deviceId: ts.deviceId, label: track?.label };
+      const unsupported = { supported: false };
       return {
-        width: ts.width ?? s.width,
-        height: ts.height ?? s.height,
-        fps: ts.frameRate ?? s.fps,
-        facing: real ? (ts.facingMode ?? s.facing) : s.facing,
+        ...base,
+        facing,
+        deviceId: device?.deviceId,
+        label: device?.label,
+        exposure: unsupported,
+        focus: unsupported,
       };
     },
     stop() {
@@ -143,6 +158,19 @@ export function createSimCamera(opts: SimCameraOptions = {}): SimCamera {
       release();
     },
     onFrame: () => () => {},
+    async listCameras() {
+      const md = opts.real === false ? null : navigator.mediaDevices;
+      if (!md?.enumerateDevices) return SIM_DEVICES.map(({ deviceId, label }) => ({ deviceId, label }));
+      const all = await md.enumerateDevices();
+      return all
+        .filter((d) => d.kind === 'videoinput' && d.deviceId !== '')
+        .map((d) => ({ deviceId: d.deviceId, label: d.label }));
+    },
+    onDeviceChange(cb) {
+      const md = opts.real === false ? null : navigator.mediaDevices;
+      md?.addEventListener?.('devicechange', cb);
+      return () => md?.removeEventListener?.('devicechange', cb);
+    },
     onEnded(cb): Unsubscribe {
       ended.add(cb);
       return () => ended.delete(cb);

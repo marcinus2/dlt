@@ -16,11 +16,15 @@ export interface RealOptions {
 export function createRealEffects(opts: RealOptions): Effects {
   const log = opts.log ?? (() => {});
   const audio: Announcer = createAnnouncer();
+  const camera = createCameraSource();
+  const analyzer = createFrameAnalyzer();
+  const engine = createDetectorEngine({ analyzer });
   return {
-    camera: createCameraSource(),
-    engine: createDetectorEngine({ analyzer: createFrameAnalyzer() }),
+    camera,
+    engine,
     audio: opts.log ? loggedAnnouncer(audio, log) : audio,
     wakeLock: { acquire: () => log('wakeLock.acquire'), release: () => log('wakeLock.release') },
     settings: opts.settings,
+    diag: { engine, analyzer, camera },
   };
 }

@@ -1,4 +1,5 @@
 import { Volume2 } from 'lucide-react';
+import { lazy, Suspense } from 'react';
 import type { SessionData } from '../../session/types.ts';
 import { ActionBar, ActionButton } from '../components/ActionBar.tsx';
 import { Banner } from '../components/Banner.tsx';
@@ -7,8 +8,11 @@ import { LapList } from '../components/LapList.tsx';
 import { type ChipKind, StatusChip, WarnChip } from '../components/StatusChip.tsx';
 import { TopBar } from '../components/TopBar.tsx';
 import { lapsText, pauseBanner } from '../copy.ts';
-import { SpeechLatencyHud } from '../debug/Hud.tsx';
 import { useApp } from '../store.tsx';
+
+const SpeechLatencyHud = lazy(() =>
+  import('../debug/Hud.tsx').then((m) => ({ default: m.SpeechLatencyHud })),
+);
 
 function chip(session: SessionData, paused: boolean): { kind: ChipKind; text: string } {
   if (paused) return { kind: 'paused', text: lapsText(session.laps.length) };
@@ -72,7 +76,11 @@ export function Session() {
             <span className="font-semibold text-text">{status.text}</span>
             {lowFps && !paused && <WarnChip>Low frame rate — passes may be missed</WarnChip>}
           </div>
-          {debug && <SpeechLatencyHud />}
+          {debug && (
+            <Suspense>
+              <SpeechLatencyHud />
+            </Suspense>
+          )}
           <Banners paused={paused} />
           <LapHero session={session} />
         </div>

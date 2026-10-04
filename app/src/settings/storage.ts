@@ -1,10 +1,14 @@
-// Settings persistence (spec §2.6): `dronelap.settings.v2`, written only on Save,
-// in-memory fallback when storage is unavailable. PoC v1 migration comes in M7.
+// Persistence (spec §2.6): `dronelap.settings.v2`, written only on Save; without it the PoC's
+// `dronelap.settings.v1` is migrated (and left alone). `dronelap.ui.v1` holds UI flags, written on
+// change. In-memory fallback when storage is unavailable.
 import type { Settings } from '../engine/types.ts';
+import { migrateV1 } from './migrate.ts';
 import { DEFAULTS } from './schema.ts';
 import { sanitize } from './validate.ts';
 
 export const SETTINGS_KEY = 'dronelap.settings.v2';
+export const POC_SETTINGS_KEY = 'dronelap.settings.v1';
+export const UI_KEY = 'dronelap.ui.v1';
 
 export type Backend = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -29,7 +33,8 @@ export function createSettingsStorage(backend: Backend | null = localBackend()):
       if (memory) return memory;
       try {
         const raw = backend?.getItem(SETTINGS_KEY);
-        memory = raw ? sanitize(JSON.parse(raw)) : DEFAULTS;
+        const poc = raw ? null : backend?.getItem(POC_SETTINGS_KEY);
+        memory = raw ? sanitize(JSON.parse(raw)) : poc ? sanitize(migrateV1(JSON.parse(poc))) : DEFAULTS;
       } catch {
         memory = DEFAULTS; // unreadable storage or corrupt JSON
       }
@@ -43,6 +48,45 @@ export function createSettingsStorage(backend: Backend | null = localBackend()):
         return true;
       } catch {
         return false; // quota exceeded / private mode
+      }
+    },
+  };
+}
+
+export interface UiPrefs {
+  installHintDismissed: boolean;
+}
+
+export interface UiStorage {
+  load(): UiPrefs;
+  /** false = could not be persisted (kept in memory). */
+  save(p: UiPrefs): boolean;
+}
+
+const UI_DEFAULTS: UiPrefs = { installHintDismissed: false };
+
+export function createUiStorage(backend: Backend | null = localBackend()): UiStorage {
+  let memory: UiPrefs | null = null;
+  return {
+    load() {
+      if (memory) return memory;
+      memory = UI_DEFAULTS;
+      try {
+        const raw = JSON.parse(backend?.getItem(UI_KEY) ?? 'null') as Partial<UiPrefs> | null;
+        if (typeof raw?.installHintDismissed === 'boolean')
+          memory = { installHintDismissed: raw.installHintDismissed };
+      } catch {
+        // corrupt or unreadable: defaults
+      }
+      return memory;
+    },
+    save(p) {
+      memory = p;
+      try {
+        backend?.setItem(UI_KEY, JSON.stringify(p));
+        return backend !== null;
+      } catch {
+        return false;
       }
     },
   };

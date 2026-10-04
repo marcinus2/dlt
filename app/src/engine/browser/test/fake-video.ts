@@ -162,6 +162,7 @@ export function fakeMediaDevices(script: (FakeTrack | { name: string; constraint
         { kind: 'audioinput', deviceId: 'mic', label: 'Mic' },
         { kind: 'videoinput', deviceId: 'cam-1', label: 'Front' },
         { kind: 'videoinput', deviceId: 'cam-2', label: 'Back' },
+        { kind: 'videoinput', deviceId: '', label: '' }, // pre-grant placeholder (Safari)
       ] as MediaDeviceInfo[];
     },
     addEventListener(_type: string, cb: () => void) {

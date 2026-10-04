@@ -1,7 +1,21 @@
+import { processedRoi } from '../../engine/roi.ts';
 import type { Roi } from '../../engine/types.ts';
+import type { FrameSize } from './CameraLayer.tsx';
 
-/** ROI box over the preview; its border flashes green on a detected pass (G3). */
-export function RoiOverlay({ roi, flash }: { roi: Roi; flash: number }) {
+/**
+ * ROI box over the preview; its border flashes green on a detected pass (G3). With the frame size
+ * it shows the analyzer's pixel crop, i.e. exactly the processed area (plan 7.3).
+ */
+export function RoiOverlay({
+  roi: setting,
+  flash,
+  frame,
+}: {
+  roi: Roi;
+  flash: number;
+  frame?: FrameSize | null;
+}) {
+  const roi = frame ? processedRoi(setting, frame.width, frame.height) : setting;
   return (
     <div
       data-testid="roi"

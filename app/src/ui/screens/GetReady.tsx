@@ -1,7 +1,7 @@
 import { Check, LoaderCircle } from 'lucide-react';
 import { BigButton } from '../components/BigButton.tsx';
 import { CameraErrorCard } from '../components/CameraErrorCard.tsx';
-import { CameraLayer } from '../components/CameraLayer.tsx';
+import { CameraLayer, useVideoSize } from '../components/CameraLayer.tsx';
 import { RoiOverlay } from '../components/RoiOverlay.tsx';
 import { WarnChip } from '../components/StatusChip.tsx';
 import { TopBar } from '../components/TopBar.tsx';
@@ -47,7 +47,8 @@ export function GetReady() {
   const width = useApp((s) => s.ui.cameraInfo?.width ?? s.saved.camera.width);
   const height = useApp((s) => s.ui.cameraInfo?.height ?? s.saved.camera.height);
   const error = typeof camera === 'object' ? camera.error : null;
-  const aspect = width / height;
+  const frame = useVideoSize();
+  const aspect = frame ? frame.width / frame.height : width / height;
 
   return (
     <>
@@ -59,7 +60,7 @@ export function GetReady() {
           ) : (
             <div className="flex min-h-40 w-full flex-1 basis-0 items-center justify-center overflow-hidden">
               <CameraLayer mirrored={facing === 'user'} aspect={aspect} fit>
-                <RoiOverlay roi={roi} flash={flash} />
+                <RoiOverlay roi={roi} flash={flash} frame={frame} />
               </CameraLayer>
             </div>
           )}

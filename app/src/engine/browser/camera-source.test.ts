@@ -63,6 +63,8 @@ describe('CameraSource start', () => {
       facing: 'environment',
       deviceId: 'cam-1',
       fpsFallback: false,
+      exposure: { supported: false },
+      focus: { supported: false },
     });
   });
 
@@ -268,18 +270,30 @@ describe('CameraSource controls', () => {
     });
   });
 
-  it('auto exposure is left alone on start', async () => {
-    const track = fakeTrack({}, exposureCaps);
+  it('auto exposure is left alone on start; its capability and value are still reported', async () => {
+    const track = fakeTrack({ exposureMode: 'continuous', exposureTime: 33 }, exposureCaps);
     const { source } = setup([track], { exposureManual: false });
-    await source.start();
+    const info = await source.start();
     expect(track.applied).toEqual([]);
-    expect(source.controls().exposure).toBeNull();
+    const report = { supported: true, mode: 'continuous', value: 33, range: { min: 10, max: 50 } };
+    expect(source.controls().exposure).toEqual(report);
+    expect(info.exposure).toEqual(report);
+    expect(info.focus).toEqual({ supported: false });
+    source.stop();
+    expect(source.controls()).toEqual({ exposure: null, focus: null });
+  });
+
+  it('reports the track label', async () => {
+    const track = Object.assign(fakeTrack(), { label: 'camera2 1, facing back' });
+    const { source } = setup([track]);
+    expect((await source.start()).label).toBe('camera2 1, facing back');
   });
 
   it('unsupported and failing controls are reported, start still succeeds', async () => {
     const { source } = setup([fakeTrack()], { exposureManual: true, focusLock: true });
     await source.start();
     expect(source.controls()).toEqual({ exposure: { supported: false }, focus: { supported: false } });
+    expect(source.info()?.exposure).toEqual({ supported: false });
 
     const track = fakeTrack({}, exposureCaps);
     track.applyError = new Error('nope');
@@ -306,7 +320,7 @@ describe('CameraSource controls', () => {
 });
 
 describe('CameraSource devices', () => {
-  it('lists video inputs only and reports devicechange', async () => {
+  it('lists video inputs with a deviceId only and reports devicechange', async () => {
     const { md, source } = setup([]);
     expect(await source.listCameras()).toEqual([
       { deviceId: 'cam-1', label: 'Front' },

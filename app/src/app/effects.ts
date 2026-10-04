@@ -1,8 +1,12 @@
 // Effect runner: executes reducer effects against injected implementations
 // (real engine from M5, sim/ before). Gesture-bound effects run synchronously.
 import type { Announcer } from '../audio/announcer.ts';
+import type { CameraSource } from '../engine/browser/camera-source.ts';
+import type { Analyzer } from '../engine/browser/frame-analyzer.ts';
 import { toCameraError } from '../engine/camera-error.ts';
+import type { Engine } from '../engine/engine.ts';
 import type {
+  CameraDevice,
   CameraInfo,
   CameraSettings,
   DetectorEngine,
@@ -18,6 +22,9 @@ import type { AppEvent, AppState, Cue, Effect } from './machine.ts';
 export interface CameraPort extends FrameSource {
   /** Settings for the next start(). */
   configure(s: CameraSettings): void;
+  /** Video inputs; labels only after a camera grant. */
+  listCameras(): Promise<CameraDevice[]>;
+  onDeviceChange(cb: () => void): Unsubscribe;
 }
 
 export interface Effects {
@@ -26,6 +33,14 @@ export interface Effects {
   audio: Announcer;
   wakeLock: { acquire(): void; release(): void };
   settings: SettingsStorage;
+  /** Real pipeline internals for Diagnostics (plan 7.5); absent in sim. */
+  diag?: DiagTargets;
+}
+
+export interface DiagTargets {
+  engine: Engine;
+  analyzer: Analyzer;
+  camera: CameraSource;
 }
 
 /** What the runner needs from the store. */
@@ -37,6 +52,7 @@ export interface RunnerHost {
   committed(ok: boolean): void;
   reverted(): void;
   cameraInfo(info: CameraInfo | null): void;
+  cameras(list: CameraDevice[]): void;
   passFlash(): void;
   stats(stats: EngineStats | null, lowFps: boolean): void;
   audioLocked(locked: boolean): void;
@@ -102,7 +118,13 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
 
   const settingsFor = (draft?: true) => (draft ? host.draft() : host.saved());
 
+  /** Re-enumerate on Configuration, after a grant (labels appear) and on devicechange (spec §2.1). */
+  const refreshCameras = () => {
+    fx.camera.listCameras().then(host.cameras, () => {});
+  };
+
   fx.camera.onEnded((error) => host.dispatch({ type: 'CAMERA_LOST', error }));
+  fx.camera.onDeviceChange(refreshCameras);
   fx.audio.onLockChange(host.audioLocked);
   fx.audio.onVoiceChange(host.voiceAvailable);
 
@@ -146,6 +168,7 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
       (info) => {
         if (gen !== cameraGen) return;
         host.cameraInfo(info);
+        refreshCameras();
         onLive();
       },
       (err: unknown) => {
@@ -206,6 +229,7 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
 
   return {
     run,
+    refreshCameras,
     /** Banner tap (plan 6.5); inside the gesture. */
     unlockAudio: () => fx.audio.unlock(),
     /** Diagnostics sound check with the draft audio toggles; inside the gesture. */

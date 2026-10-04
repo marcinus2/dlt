@@ -1,15 +1,18 @@
-import { Bug, ChevronDown, FlaskConical, RotateCcw, Volume2 } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
-import type { Settings } from '../../engine/types.ts';
-import type { Cue } from '../../session/types.ts';
+import { ChevronDown, LoaderCircle, Play, RotateCcw, Square } from 'lucide-react';
+import { lazy, type ReactNode, Suspense, useEffect, useId, useState } from 'react';
+import type { ControlReport, Settings } from '../../engine/types.ts';
 import { GROUPS, type Group, getSetting, SCHEMA } from '../../settings/schema.ts';
 import { isDefault } from '../../settings/validate.ts';
 import { roiPreset, SettingField } from '../components/SettingField.tsx';
 import { TopBar } from '../components/TopBar.tsx';
 import { cx } from '../cx.ts';
-import { SpeechLatencyHud } from '../debug/Hud.tsx';
 import { useApp } from '../store.tsx';
 import { UpdateToast } from './UpdateToast.tsx';
+
+const Diagnostics = lazy(() => import('../debug/Diagnostics.tsx').then((m) => ({ default: m.Diagnostics })));
+const TestCalibrate = lazy(() =>
+  import('../config/TestCalibrate.tsx').then((m) => ({ default: m.TestCalibrate })),
+);
 
 const sec = (ms: number) => `${+(ms / 1000).toFixed(1)} s`;
 const pct = (v: number) => `${+(v * 100).toPrecision(3)}%`;
@@ -42,12 +45,17 @@ function Disclosure({
   summary,
   defaultOpen = false,
   level = 'group',
+  onToggle,
+  mountWhenOpen = false,
   children,
 }: {
   title: string;
   summary?: string;
   defaultOpen?: boolean;
   level?: 'group' | 'advanced';
+  onToggle?: (open: boolean) => void;
+  /** Render the content only while open (lazy panels with their own loops). */
+  mountWhenOpen?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -60,7 +68,10 @@ function Disclosure({
           type="button"
           aria-expanded={open}
           aria-controls={id}
-          onClick={() => setOpen(!open)}
+          onClick={() => {
+            setOpen(!open);
+            onToggle?.(!open);
+          }}
           className={cx(
             'flex w-full items-center gap-3 text-left',
             group ? 'min-h-16 px-4 text-lg font-bold' : 'min-h-12 font-semibold text-text-muted',
@@ -81,7 +92,7 @@ function Disclosure({
         </button>
       </h2>
       <div id={id} hidden={!open} className={cx(group && 'border-t border-border px-4 pb-2')}>
-        {children}
+        {(open || !mountWhenOpen) && children}
       </div>
     </section>
   );
@@ -91,6 +102,7 @@ function Fields({ group, advanced }: { group: Group; advanced: boolean }) {
   const draft = useApp((s) => s.draft);
   const errors = useApp((s) => s.errors);
   const setDraft = useApp((s) => s.setDraft);
+  const devices = useApp((s) => s.ui.cameras);
   return SCHEMA.filter((f) => f.group === group && Boolean(f.advanced) === advanced).map((f) => (
     <SettingField
       key={f.key}
@@ -99,49 +111,93 @@ function Fields({ group, advanced }: { group: Group; advanced: boolean }) {
       error={errors[f.key]}
       changed={!isDefault(draft, f.key)}
       onChange={(v) => setDraft(f.key, v)}
+      devices={devices}
     />
   ));
 }
 
-const SOUND_CHECK: { cue: Cue; label: string }[] = [
-  { cue: 'armed', label: 'Armed' },
-  { cue: 'go', label: 'Go' },
-  { cue: 'lap', label: 'Lap' },
-  { cue: 'best', label: 'Best' },
-  { cue: 'paused', label: 'Paused' },
-];
+function controlText(r: ControlReport | undefined, fmt: (v: number) => string): string {
+  if (!r) return 'unknown';
+  if (!r.supported) return 'not supported';
+  if (r.error) return `supported, but failed: ${r.error}`;
+  const value = r.value === undefined ? '' : ` ${fmt(r.value)}`;
+  const range = r.range ? ` (range ${fmt(r.range.min)}–${fmt(r.range.max)})` : '';
+  return `supported · ${r.mode ?? '?'}${value}${range}`;
+}
 
-/** Diagnostics: play each cue with the draft audio toggles (plan 6.2). */
-function SoundCheck() {
-  const testCue = useApp((s) => s.testCue);
-  return (
-    <div className="my-3 flex flex-col gap-2">
-      <p className="flex items-center gap-2 font-semibold text-text">
-        <Volume2 aria-hidden size={20} className="text-accent" />
-        Sound check
+/** Exposure / focus support of the selected camera (or what Automatic picked last), spec §2.1. */
+function CameraReport() {
+  const deviceId = useApp((s) => s.draft.camera.deviceId ?? s.ui.lastDeviceId);
+  const caps = useApp((s) => (deviceId ? s.ui.cameraCaps[deviceId] : undefined));
+  const manual = useApp((s) => s.draft.camera.exposureManual);
+  if (!caps) {
+    return (
+      <p data-testid="camera-report" className="mt-2 mb-1 text-sm text-text-muted">
+        Exposure and focus support show here once this camera has run (Get Ready or Test &amp; calibrate).
       </p>
-      <div className="flex flex-wrap gap-2">
-        {SOUND_CHECK.map(({ cue, label }) => (
-          <button
-            key={cue}
-            type="button"
-            onClick={() => testCue(cue)}
-            className="min-h-12 rounded-full border border-border px-4 font-semibold text-text hover:bg-surface-2"
-          >
-            {label}
-          </button>
+    );
+  }
+  const rows = [
+    { label: 'Exposure control', text: controlText(caps.exposure, (v) => String(Math.round(v))) },
+    { label: 'Focus control', text: controlText(caps.focus, (v) => String(+v.toFixed(2))) },
+  ];
+  return (
+    <div
+      data-testid="camera-report"
+      className="mt-2 mb-1 rounded-card bg-surface-2 px-3 py-2 text-sm wrap-anywhere"
+    >
+      <p className="font-semibold text-text">{caps.label || 'This camera'}</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-text-muted">
+        {rows.map((r) => (
+          <div key={r.label} className="contents">
+            <dt>{r.label}</dt>
+            <dd className="text-text">{r.text}</dd>
+          </div>
         ))}
-      </div>
-      <SpeechLatencyHud />
+      </dl>
+      {manual && caps.exposure?.supported === false && (
+        <p role="status" className="mt-1 font-semibold text-warn">
+          Manual exposure is not supported on this camera; it keeps auto exposure.
+        </p>
+      )}
     </div>
   );
 }
 
-function Placeholder({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+const Spinner = () => (
+  <LoaderCircle aria-hidden className="my-3 animate-spin text-text-muted motion-reduce:animate-none" />
+);
+
+/** Start / Stop test runs the tuning camera (G7) inside the tap; the panel is a lazy chunk. */
+function TestSection() {
+  const tuning = useApp((s) => s.state.tuning);
+  const dispatch = useApp((s) => s.dispatch);
   return (
-    <div className="my-3 flex items-start gap-3 rounded-card border border-dashed border-border bg-surface-2 px-4 py-3 text-text-muted">
-      {icon}
-      <div>{children}</div>
+    <div className="my-3 flex flex-col gap-3">
+      <p className="text-sm text-text-muted">
+        Live preview with these settings, a motion meter and <b className="text-text">Calibrate</b>, which
+        watches the empty scene and sets the start and end ratio. Camera changes apply on the next start.
+      </p>
+      <button
+        type="button"
+        onClick={() => dispatch({ type: tuning ? 'TUNE_STOP' : 'TUNE_START' })}
+        className={cx(
+          'inline-flex min-h-12 items-center gap-2 self-start rounded-full px-5 font-semibold',
+          tuning ? 'border border-border text-text hover:bg-surface-2' : 'bg-accent text-accent-ink',
+        )}
+      >
+        {tuning ? <Square aria-hidden size={18} /> : <Play aria-hidden size={18} />}
+        {tuning ? 'Stop test' : 'Start test'}
+      </button>
+      {tuning && (
+        <Suspense
+          fallback={
+            <LoaderCircle aria-hidden className="animate-spin text-text-muted motion-reduce:animate-none" />
+          }
+        >
+          <TestCalibrate />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -154,6 +210,10 @@ export function Configuration() {
   const resetDraft = useApp((s) => s.resetDraft);
   const debug = useApp((s) => s.debug);
   const voiceAvailable = useApp((s) => s.ui.voiceAvailable);
+  const refreshCameras = useApp((s) => s.refreshCameras);
+  const tuning = useApp((s) => s.state.tuning);
+  const dispatch = useApp((s) => s.dispatch);
+  useEffect(refreshCameras, [refreshCameras]);
 
   return (
     <>
@@ -168,30 +228,20 @@ export function Configuration() {
               title={g.title}
               summary={groupSummary(g.id, draft)}
               defaultOpen={g.id === 'camera' || g.id === 'detection'}
+              onToggle={
+                g.id === 'calibration'
+                  ? (open) => !open && tuning && dispatch({ type: 'TUNE_STOP' })
+                  : undefined
+              }
             >
-              {g.id === 'calibration' && (
-                <Placeholder
-                  icon={<FlaskConical aria-hidden size={22} className="mt-0.5 shrink-0 text-accent" />}
-                >
-                  <p className="font-semibold text-text">Live preview, ratio meter and Calibrate</p>
-                  <p className="text-sm">
-                    Arrive with real detection. Calibrate will set the start and end ratio.
-                  </p>
-                  <button
-                    type="button"
-                    disabled
-                    className="mt-2 min-h-12 rounded-full border border-border px-5 font-semibold text-text disabled:opacity-50"
-                  >
-                    Calibrate
-                  </button>
-                </Placeholder>
-              )}
+              {g.id === 'calibration' && <TestSection />}
               {g.id === 'audio' && !voiceAvailable && (
                 <p role="status" className="mt-3 text-sm font-semibold text-warn">
                   Voice not available on this device — beeps only.
                 </p>
               )}
               <Fields group={g.id} advanced={false} />
+              {g.id === 'camera' && <CameraReport />}
               {hasAdvanced && (
                 <Disclosure title="Advanced" level="advanced">
                   <Fields group={g.id} advanced />
@@ -201,12 +251,10 @@ export function Configuration() {
           );
         })}
         {debug && (
-          <Disclosure title="Diagnostics" summary="debug">
-            <SoundCheck />
-            <Placeholder icon={<Bug aria-hidden size={22} className="mt-0.5 shrink-0 text-accent" />}>
-              <p className="font-semibold text-text">Ratio graph, diff view, HUD, event log</p>
-              <p className="text-sm">File replay and CSV export arrive with the engine port.</p>
-            </Placeholder>
+          <Disclosure title="Diagnostics" summary="debug" mountWhenOpen>
+            <Suspense fallback={<Spinner />}>
+              <Diagnostics />
+            </Suspense>
           </Disclosure>
         )}
         {!valid && (

@@ -1,5 +1,5 @@
 // Parity check (plan 4.11): the same synthetic clip through the PoC (/poc/) and the v1 FileSource
-// (?debug=engine) in Chromium; compares the events CSVs, and v1's first and second loop (4.7).
+// (Configuration › Diagnostics › Replay file, `?debug=1`, default settings) in Chromium; compares the events CSVs, and v1's first and second loop (4.7).
 // Needs ffmpeg and a build: `npm run build:pages && npm run parity`.
 
 import { type ChildProcess, spawn } from 'node:child_process';
@@ -126,18 +126,21 @@ try {
   const browser = await chromium.launch();
   const [poc, v1] = await Promise.all([browser.newPage(), browser.newPage()]);
   await poc.goto(`${base}poc/`);
-  await v1.goto(`${base}?debug=engine`);
+  await v1.goto(`${base}?debug=1`);
+  await v1.getByRole('button', { name: 'Configuration' }).click();
+  await v1.getByRole('button', { name: /^Diagnostics/ }).click();
+  await v1.getByTestId('engine-hud').waitFor();
   await Promise.all([
     (async () => {
       await poc.locator('#videoFile').setInputFiles(clipPath);
       await poc.locator('#startDetection:not([disabled])').click();
     })(),
-    v1.locator('input[type=file]').setInputFiles(clipPath),
+    v1.getByTestId('diagnostics').locator('input[type=file]').setInputFiles(clipPath),
   ]);
   await new Promise((r) => setTimeout(r, DURATION * 2 + 1500)); // two loops
   const pocCsv = await download(poc, () => poc.locator('#exportEvents').click());
   const v1Csv = await download(v1, () => v1.getByRole('button', { name: 'Events CSV' }).click());
-  const hud = await v1.locator('pre').textContent();
+  const hud = await v1.getByTestId('engine-hud').textContent();
   await browser.close();
 
   const [pocLoop1 = []] = loops(parseEvents(pocCsv));

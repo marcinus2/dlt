@@ -1,5 +1,6 @@
 // Simulated DetectorEngine (plan 2.5, G11): warm-up → armed after warmupMs, auto passes with
-// random lap times (≥ cooldownMs), manual pass(), fake stats with a low-fps switch.
+// random lap times (≥ cooldownMs), manual pass(), fake stats with a low-fps switch, and noise-floor
+// samples at ~30 fps while someone listens (Test & calibrate meter).
 import type {
   DetectionSettings,
   DetectorEngine,
@@ -36,6 +37,7 @@ export interface SimEngine extends DetectorEngine {
 
 export const SIM_MOTION_MS = 180; // MOTION_START → MOTION_END of a simulated pass
 export const SIM_FIRST_PASS_MS = 3000; // auto: first pass after arming
+export const SIM_SAMPLE_MS = 33;
 
 interface Listeners {
   pass: Set<(p: PassEvent) => void>;
@@ -63,6 +65,8 @@ export function createSimEngine(opts: SimEngineOptions = {}): SimEngine {
   let lastStart: Ms | null = null;
   let timers: Timer[] = [];
   let autoTimer: Timer | null = null;
+  let sampleTimer: Timer | null = null;
+  const sample: MotionSample = { t: 0, ratio: 0, globalRatio: 0, global: false, gapReset: false };
   let run = 0;
   let dropped = 0;
 
@@ -87,6 +91,19 @@ export function createSimEngine(opts: SimEngineOptions = {}): SimEngine {
     for (const t of timers) clearTimer(t);
     timers = [];
     autoTimer = null;
+    sampleTimer = null;
+  }
+
+  function scheduleSamples() {
+    if (sampleTimer !== null || phase === 'stopped' || ls.sample.size === 0) return;
+    sampleTimer = later(SIM_SAMPLE_MS, () => {
+      sampleTimer = null;
+      if (ls.sample.size === 0) return; // resumes on the next on('sample')
+      sample.t = now();
+      sample.ratio = phase === 'motion' ? 0.05 + random() * 0.15 : 0.001 + random() * 0.002;
+      emit(ls.sample, sample);
+      scheduleSamples();
+    });
   }
 
   function lapMs(): Ms {
@@ -104,6 +121,7 @@ export function createSimEngine(opts: SimEngineOptions = {}): SimEngine {
     run++;
     lastStart = null;
     setPhase('warmup');
+    scheduleSamples();
     later(settings?.warmupMs ?? 0, () => {
       setPhase('armed');
       scheduleAuto(SIM_FIRST_PASS_MS);
@@ -163,6 +181,7 @@ export function createSimEngine(opts: SimEngineOptions = {}): SimEngine {
     on(e: keyof Listeners, cb: (v: never) => void): Unsubscribe {
       const set = ls[e] as Set<unknown>;
       set.add(cb);
+      if (e === 'sample') scheduleSamples();
       return () => set.delete(cb);
     },
     stats(): EngineStats {

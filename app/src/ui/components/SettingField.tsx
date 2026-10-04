@@ -1,6 +1,6 @@
 import { Minus, Plus } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
-import type { Roi } from '../../engine/types.ts';
+import type { CameraDevice, Roi } from '../../engine/types.ts';
 import {
   type EnumField,
   type FieldMeta,
@@ -19,6 +19,8 @@ interface Props {
   /** Differs from the default → "changed" dot. */
   changed: boolean;
   onChange: (v: unknown) => void;
+  /** Choices of a `device` field. */
+  devices?: readonly CameraDevice[];
 }
 
 interface ControlProps<F extends FieldMeta> {
@@ -36,7 +38,7 @@ const roundTo = (v: number, step: number) => Number(v.toFixed(decimals(step) + 2
 const asNum = (v: unknown) => (typeof v === 'number' ? v : Number.NaN);
 
 /** Schema-driven form row (spec §4.3): label, control, help, "changed" dot, inline error. */
-export function SettingField({ meta, value, error, changed, onChange }: Props) {
+export function SettingField({ meta, value, error, changed, onChange, devices = [] }: Props) {
   const id = useId();
   const helpId = `${id}-help`;
   const errId = `${id}-err`;
@@ -65,7 +67,7 @@ export function SettingField({ meta, value, error, changed, onChange }: Props) {
       {meta.type === 'ratio' && <RatioControl {...p} meta={meta} />}
       {meta.type === 'select' && <SelectControl {...p} meta={meta} />}
       {meta.type === 'enum' && <Segmented {...p} meta={meta} />}
-      {meta.type === 'device' && <DeviceControl {...p} meta={meta} />}
+      {meta.type === 'device' && <DeviceControl {...p} meta={meta} devices={devices} />}
       {meta.type === 'roi' && <RoiControl {...p} meta={meta} />}
       <p id={helpId} className="mt-1.5 text-sm text-text-muted">
         {meta.help}
@@ -254,17 +256,39 @@ function SelectControl({ meta, value, onChange, id, describedBy, invalid }: Cont
   );
 }
 
-function DeviceControl({ id, describedBy }: ControlProps<FieldMeta>) {
-  // The device list needs a granted camera; the picker arrives with M7.
+/** Automatic (by facing) or one camera. A saved camera that isn't listed stays selectable. */
+function DeviceControl({
+  value,
+  onChange,
+  id,
+  describedBy,
+  invalid,
+  devices,
+}: ControlProps<FieldMeta> & { devices: readonly CameraDevice[] }) {
+  const v = typeof value === 'string' ? value : null;
+  const missing = v !== null && !devices.some((d) => d.deviceId === v);
   return (
-    <select
-      id={id}
-      disabled
-      aria-describedby={describedBy}
-      className={cx(INPUT, 'w-full disabled:opacity-60')}
-    >
-      <option>Automatic</option>
-    </select>
+    <>
+      <select
+        id={id}
+        value={v ?? ''}
+        onChange={(e) => onChange(e.target.value || null)}
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
+        className={cx(INPUT, 'w-full')}
+      >
+        <option value="">Automatic</option>
+        {devices.map((d, i) => (
+          <option key={d.deviceId} value={d.deviceId}>
+            {d.label || `Camera ${i + 1}`}
+          </option>
+        ))}
+        {missing && <option value={v}>Saved camera (not connected)</option>}
+      </select>
+      {devices.every((d) => !d.label) && (
+        <p className="mt-1.5 text-sm text-text-muted">Camera names show once the camera has run.</p>
+      )}
+    </>
   );
 }
 

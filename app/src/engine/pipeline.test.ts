@@ -1,10 +1,13 @@
 // Synthetic frames through motion-core + detector (plan 4.4): exactly N passes at every fps.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULTS } from '../settings/schema.ts';
 import { createDetector } from './detector.ts';
 import { type DiffOptions, diffLuma } from './motion-core.ts';
 import { type ClipOptions, syntheticClip } from './test/synthetic.ts';
 import type { DetectorEvent } from './types.ts';
+
+// CPU-heavy: keep slow / contended CI runners from hitting the 5 s default.
+vi.setConfig({ testTimeout: 20_000 });
 
 const detection = DEFAULTS.detection;
 

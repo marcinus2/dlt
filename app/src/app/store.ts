@@ -1,9 +1,18 @@
 // App store: machine state + settings draft + UI flags. dispatch() reduces, then runs
 // effects synchronously (gesture-bound effects stay inside the tap handler).
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { CameraError, CameraInfo, EngineStats, Settings } from '../engine/types.ts';
+import type {
+  CameraDevice,
+  CameraError,
+  CameraInfo,
+  EngineStats,
+  MotionSample,
+  Settings,
+  Unsubscribe,
+} from '../engine/types.ts';
 import { DEFAULTS, type SettingKey, setSetting } from '../settings/schema.ts';
 import { equalSettings, type SettingErrors, validate } from '../settings/validate.ts';
+import type { Diagnostics } from './diagnostics.ts';
 import { createEffectRunner, type Effects, type SpeechLatency } from './effects.ts';
 import { type AppEvent, type AppState, type Cue, initialState, reduce } from './machine.ts';
 
@@ -12,12 +21,20 @@ export interface Toast {
   text: string;
 }
 
+/** What a camera run reported about one device (Configuration › Camera, spec §2.1). */
+export type CameraCaps = Pick<CameraInfo, 'label' | 'facing' | 'exposure' | 'focus'>;
+
 export interface UiState {
   /** Bumped on every engine pass; Get Ready / tuning flash the ROI border (G3). */
   passFlash: number;
   stats: EngineStats | null;
   lowFps: boolean;
   cameraInfo: CameraInfo | null;
+  cameras: CameraDevice[];
+  /** Per deviceId, from the last run of that camera (kept after it stops). */
+  cameraCaps: Record<string, CameraCaps>;
+  /** Device of the last camera run: what Automatic picked. */
+  lastDeviceId: string | null;
   toast: Toast | null;
   /** AudioContext not running after an unlock: "Tap to enable sound" (spec §3.4). */
   audioLocked: boolean;
@@ -33,6 +50,9 @@ export const initialUi: UiState = {
   stats: null,
   lowFps: false,
   cameraInfo: null,
+  cameras: [],
+  cameraCaps: {},
+  lastDeviceId: null,
   toast: null,
   audioLocked: false,
   voiceAvailable: true,
@@ -72,6 +92,8 @@ export interface AppStore {
   debug: boolean;
   dispatch(e: AppEvent): void;
   setDraft(key: SettingKey, value: unknown): void;
+  /** Several fields in one change (Calibrate writes start + end ratio). */
+  setDraftValues(values: Partial<Record<SettingKey, unknown>>): void;
   resetDraft(): void;
   showToast(text: string): void;
   dismissToast(id: number): void;
@@ -79,6 +101,11 @@ export interface AppStore {
   /** Inside a tap handler only. */
   unlockAudio(): void;
   testCue(cue: Cue): void;
+  refreshCameras(): void;
+  /** Every engine frame (one reused object): draw outside React, never set state per sample. */
+  onSample(cb: (s: Readonly<MotionSample>) => void): Unsubscribe;
+  /** Diagnostics (`?debug=1`, lazy chunk); the caller disposes it. */
+  loadDiagnostics(): Promise<Diagnostics>;
 }
 
 export interface StoreOptions {
@@ -110,7 +137,14 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
         if (!ok) get().showToast(STORAGE_TOAST);
       },
       reverted: () => set({ draft: get().saved, errors: {} }),
-      cameraInfo: (cameraInfo) => get().setUi({ cameraInfo }),
+      cameraInfo: (cameraInfo) => {
+        const id = cameraInfo?.deviceId;
+        if (!cameraInfo || !id) return get().setUi({ cameraInfo });
+        const { label, facing, exposure, focus } = cameraInfo;
+        const caps = { ...get().ui.cameraCaps, [id]: { label, facing, exposure, focus } };
+        get().setUi({ cameraInfo, cameraCaps: caps, lastDeviceId: id });
+      },
+      cameras: (cameras) => get().setUi({ cameras }),
       passFlash: () => get().setUi({ passFlash: get().ui.passFlash + 1 }),
       stats: (stats, lowFps) => get().setUi({ stats, lowFps }),
       audioLocked: (audioLocked) => get().setUi({ audioLocked }),
@@ -146,6 +180,10 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
         for (const effect of effects) runner.run(effect);
       },
       setDraft: (key, value) => changeDraft(setSetting(get().draft, key, value)),
+      setDraftValues: (values) =>
+        changeDraft(
+          Object.entries(values).reduce((d, [k, v]) => setSetting(d, k as SettingKey, v), get().draft),
+        ),
       resetDraft: () => changeDraft(DEFAULTS),
       showToast: (text) => set({ ui: { ...get().ui, toast: { id: ++toastId, text } } }),
       dismissToast: (id) => {
@@ -154,6 +192,17 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
       setUi: (patch) => set({ ui: { ...get().ui, ...patch } }),
       unlockAudio: runner.unlockAudio,
       testCue: runner.testCue,
+      refreshCameras: runner.refreshCameras,
+      onSample: (cb) => fx.engine.on('sample', cb),
+      loadDiagnostics: () =>
+        import('./diagnostics.ts').then((m) =>
+          m.createDiagnostics({
+            live: fx.engine,
+            targets: fx.diag ?? null,
+            settings: () => get().draft.detection,
+            liveInfo: () => get().ui.cameraInfo,
+          }),
+        ),
     };
   });
   return Object.assign(api, { resumeLive: () => resumeLive() });
