@@ -1,6 +1,6 @@
 import { Bug, ChevronDown, FlaskConical, RotateCcw, Volume2 } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
-import type { Settings } from '../../engine/types.ts';
+import { type ReactNode, useEffect, useId, useState } from 'react';
+import type { ControlReport, Settings } from '../../engine/types.ts';
 import type { Cue } from '../../session/types.ts';
 import { GROUPS, type Group, getSetting, SCHEMA } from '../../settings/schema.ts';
 import { isDefault } from '../../settings/validate.ts';
@@ -91,6 +91,7 @@ function Fields({ group, advanced }: { group: Group; advanced: boolean }) {
   const draft = useApp((s) => s.draft);
   const errors = useApp((s) => s.errors);
   const setDraft = useApp((s) => s.setDraft);
+  const devices = useApp((s) => s.ui.cameras);
   return SCHEMA.filter((f) => f.group === group && Boolean(f.advanced) === advanced).map((f) => (
     <SettingField
       key={f.key}
@@ -99,8 +100,54 @@ function Fields({ group, advanced }: { group: Group; advanced: boolean }) {
       error={errors[f.key]}
       changed={!isDefault(draft, f.key)}
       onChange={(v) => setDraft(f.key, v)}
+      devices={devices}
     />
   ));
+}
+
+function controlText(r: ControlReport | undefined, fmt: (v: number) => string): string {
+  if (!r) return 'unknown';
+  if (!r.supported) return 'not supported';
+  if (r.error) return `supported, but failed: ${r.error}`;
+  const value = r.value === undefined ? '' : ` ${fmt(r.value)}`;
+  const range = r.range ? ` (range ${fmt(r.range.min)}–${fmt(r.range.max)})` : '';
+  return `supported · ${r.mode ?? '?'}${value}${range}`;
+}
+
+/** Exposure / focus support of the selected camera (or what Automatic picked last), spec §2.1. */
+function CameraReport() {
+  const deviceId = useApp((s) => s.draft.camera.deviceId ?? s.ui.lastDeviceId);
+  const caps = useApp((s) => (deviceId ? s.ui.cameraCaps[deviceId] : undefined));
+  const manual = useApp((s) => s.draft.camera.exposureManual);
+  if (!caps) {
+    return (
+      <p data-testid="camera-report" className="mt-2 mb-1 text-sm text-text-muted">
+        Exposure and focus support show here once this camera has run (Get Ready or Test &amp; calibrate).
+      </p>
+    );
+  }
+  const rows = [
+    { label: 'Exposure control', text: controlText(caps.exposure, (v) => String(Math.round(v))) },
+    { label: 'Focus control', text: controlText(caps.focus, (v) => String(+v.toFixed(2))) },
+  ];
+  return (
+    <div data-testid="camera-report" className="mt-2 mb-1 rounded-card bg-surface-2 px-3 py-2 text-sm">
+      <p className="font-semibold text-text">{caps.label || 'This camera'}</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-text-muted">
+        {rows.map((r) => (
+          <div key={r.label} className="contents">
+            <dt>{r.label}</dt>
+            <dd className="text-text">{r.text}</dd>
+          </div>
+        ))}
+      </dl>
+      {manual && caps.exposure?.supported === false && (
+        <p role="status" className="mt-1 font-semibold text-warn">
+          Manual exposure is not supported on this camera; it keeps auto exposure.
+        </p>
+      )}
+    </div>
+  );
 }
 
 const SOUND_CHECK: { cue: Cue; label: string }[] = [
@@ -154,6 +201,8 @@ export function Configuration() {
   const resetDraft = useApp((s) => s.resetDraft);
   const debug = useApp((s) => s.debug);
   const voiceAvailable = useApp((s) => s.ui.voiceAvailable);
+  const refreshCameras = useApp((s) => s.refreshCameras);
+  useEffect(refreshCameras, [refreshCameras]);
 
   return (
     <>
@@ -192,6 +241,7 @@ export function Configuration() {
                 </p>
               )}
               <Fields group={g.id} advanced={false} />
+              {g.id === 'camera' && <CameraReport />}
               {hasAdvanced && (
                 <Disclosure title="Advanced" level="advanced">
                   <Fields group={g.id} advanced />

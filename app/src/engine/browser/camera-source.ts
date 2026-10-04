@@ -3,9 +3,11 @@
 // CameraError, rVFC frame loop, track `ended`, exposure/focus via applyConstraints.
 import { toCameraError } from '../camera-error.ts';
 import type {
+  CameraDevice,
   CameraError,
   CameraInfo,
   CameraSettings,
+  ControlReport,
   FrameMeta,
   FrameSource,
   Unsubscribe,
@@ -17,24 +19,13 @@ export type MediaDevicesLike = Pick<
   'getUserMedia' | 'enumerateDevices' | 'addEventListener' | 'removeEventListener'
 >;
 
-export interface CameraDevice {
-  deviceId: string;
-  label: string;
-}
-
-/** What a camera control reports after apply (Configuration shows it, M7). */
-export interface ControlReport {
-  supported: boolean;
-  mode?: string;
-  value?: number;
-  range?: { min: number; max: number };
-  error?: string;
-}
+export type { CameraDevice, ControlReport };
 
 export interface CameraSource extends FrameSource {
   /** Settings for the next start(). */
   configure(s: CameraSettings): void;
   info(): CameraInfo | null;
+  /** Reports of the running camera; null without one. */
   controls(): { exposure: ControlReport | null; focus: ControlReport | null };
   /** Re-apply after a settings change; null without a running camera. */
   applyExposure(): Promise<ControlReport | null>;
@@ -114,37 +105,54 @@ export async function openStream(
 const clamp = (v: number, r?: Range) => (r ? Math.min(r.max, Math.max(r.min, v)) : v);
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-async function exposureReport(track: MediaStreamTrack, s: CameraSettings): Promise<ControlReport> {
+const CONTROL = {
+  exposure: { mode: 'exposureMode', value: 'exposureTime' },
+  focus: { mode: 'focusMode', value: 'focusDistance' },
+} as const;
+
+/** Capability and current value of a control, without changing it. */
+export function readControl(track: MediaStreamTrack, kind: keyof typeof CONTROL): ControlReport {
+  const k = CONTROL[kind];
   const caps: Caps = track.getCapabilities?.() ?? {};
-  if (!caps.exposureMode) return { supported: false };
-  const range = caps.exposureTime;
-  const advanced = s.exposureManual
-    ? { exposureMode: 'manual', exposureTime: clamp(s.exposureTime, range) }
-    : { exposureMode: 'continuous' };
+  if (!caps[k.mode]) return { supported: false };
+  const st: TrackSettings = track.getSettings();
+  return { supported: true, mode: st[k.mode], value: st[k.value], range: caps[k.value] };
+}
+
+async function apply(
+  track: MediaStreamTrack,
+  kind: keyof typeof CONTROL,
+  advanced: Record<string, unknown>,
+): Promise<ControlReport> {
   try {
     await track.applyConstraints({ advanced: [advanced as MediaTrackConstraintSet] });
   } catch (err) {
-    return { supported: true, range, error: message(err) };
+    const caps: Caps = track.getCapabilities?.() ?? {};
+    return { supported: true, range: caps[CONTROL[kind].value], error: message(err) };
   }
-  const st: TrackSettings = track.getSettings();
-  return { supported: true, mode: st.exposureMode, value: st.exposureTime, range };
+  return readControl(track, kind);
+}
+
+async function exposureReport(track: MediaStreamTrack, s: CameraSettings): Promise<ControlReport> {
+  const caps: Caps = track.getCapabilities?.() ?? {};
+  if (!caps.exposureMode) return { supported: false };
+  return apply(
+    track,
+    'exposure',
+    s.exposureManual
+      ? { exposureMode: 'manual', exposureTime: clamp(s.exposureTime, caps.exposureTime) }
+      : { exposureMode: 'continuous' },
+  );
 }
 
 // Freeze autofocus where it settled (focusDistance read back from the track), or release it.
 async function focusReport(track: MediaStreamTrack, s: CameraSettings): Promise<ControlReport> {
   const caps: Caps = track.getCapabilities?.() ?? {};
   if (!caps.focusMode) return { supported: false };
-  const range = caps.focusDistance;
   const current = (track.getSettings() as TrackSettings).focusDistance;
   const advanced: Record<string, unknown> = { focusMode: s.focusLock ? 'manual' : 'continuous' };
-  if (s.focusLock && current != null) advanced.focusDistance = clamp(current, range);
-  try {
-    await track.applyConstraints({ advanced: [advanced as MediaTrackConstraintSet] });
-  } catch (err) {
-    return { supported: true, range, error: message(err) };
-  }
-  const st: TrackSettings = track.getSettings();
-  return { supported: true, mode: st.focusMode, value: st.focusDistance, range };
+  if (s.focusLock && current != null) advanced.focusDistance = clamp(current, caps.focusDistance);
+  return apply(track, 'focus', advanced);
 }
 
 export function createCameraSource(opts: CameraSourceOptions = {}): CameraSource {
@@ -230,9 +238,14 @@ export function createCameraSource(opts: CameraSourceOptions = {}): CameraSource
       video.srcObject = stream;
       await video.play().catch(() => {}); // muted autoplay; a rejected play() only delays frames
       if (my !== gen) throw superseded();
-      if (s.exposureManual) await applyExposure(); // leave the camera's auto modes alone otherwise
+      // Leave the camera's auto modes alone unless asked; report the capability either way.
+      if (s.exposureManual) await applyExposure();
       if (s.focusLock) await applyFocus();
       if (my !== gen) throw superseded();
+      if (track) {
+        exposure ??= readControl(track, 'exposure');
+        focus ??= readControl(track, 'focus');
+      }
       const ts: TrackSettings = track?.getSettings() ?? {};
       info = {
         width: ts.width ?? video.videoWidth,
@@ -240,7 +253,10 @@ export function createCameraSource(opts: CameraSourceOptions = {}): CameraSource
         fps: ts.frameRate ?? null,
         facing: ts.facingMode,
         deviceId: ts.deviceId,
+        label: track?.label || undefined,
         fpsFallback: opened.fpsFallback,
+        ...(exposure ? { exposure } : {}),
+        ...(focus ? { focus } : {}),
       };
       syncLoop();
       return info;
@@ -268,8 +284,9 @@ export function createCameraSource(opts: CameraSourceOptions = {}): CameraSource
     async listCameras() {
       if (!md) return [];
       const devices = await md.enumerateDevices();
+      // Before a grant some browsers list one entry with an empty deviceId: nothing to pick.
       return devices
-        .filter((d) => d.kind === 'videoinput')
+        .filter((d) => d.kind === 'videoinput' && d.deviceId !== '')
         .map((d) => ({ deviceId: d.deviceId, label: d.label }));
     },
     onDeviceChange(cb) {

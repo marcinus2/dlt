@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AudioSettings,
+  CameraDevice,
   CameraError,
   CameraInfo,
   CameraSettings,
@@ -45,6 +46,8 @@ function fakeEffects() {
   const speechStarts: ((() => void) | undefined)[] = [];
   const cueSettings: AudioSettings[] = [];
   let lockCb: ((locked: boolean) => void) | null = null;
+  let devices: CameraDevice[] = [{ deviceId: 'cam-1', label: '' }];
+  let deviceChange: (() => void) | null = null;
 
   const engine = {
     start: (_src: unknown, s: DetectionSettings) => {
@@ -80,6 +83,11 @@ function fakeEffects() {
       onFrame: () => () => {},
       onEnded: (cb) => {
         ended = cb;
+        return () => {};
+      },
+      listCameras: () => Promise.resolve(devices),
+      onDeviceChange: (cb) => {
+        deviceChange = cb;
         return () => {};
       },
     },
@@ -126,6 +134,12 @@ function fakeEffects() {
     speechStarts,
     cueSettings,
     setLocked: (locked: boolean) => lockCb?.(locked),
+    setDevices: async (list: CameraDevice[], fire = true) => {
+      devices = list;
+      if (fire) deviceChange?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    },
     endTrack: (e: CameraError) => ended?.(e),
     resolveCamera: async (i = info) => {
       pending?.resolve(i);
@@ -332,6 +346,45 @@ describe('store + effect runner', () => {
     expect(f.updated.at(-1)?.pixelDiffThreshold).toBe(25);
     store.getState().setDraft('detection.pixelDiffThreshold', 0); // invalid: not sent
     expect(f.updated).toHaveLength(1);
+  });
+
+  it('camera list: refreshed on request, after a grant and on devicechange', async () => {
+    const { f, store, dispatch } = setup();
+    const ui = () => store.getState().ui;
+    store.getState().refreshCameras();
+    await f.setDevices([{ deviceId: 'cam-1', label: '' }], false);
+    expect(ui().cameras).toEqual([{ deviceId: 'cam-1', label: '' }]);
+    const granted = [
+      { deviceId: 'cam-1', label: 'Front' },
+      { deviceId: 'cam-2', label: 'Back' },
+    ];
+    await f.setDevices(granted, false);
+    dispatch({ type: 'GET_READY' });
+    await f.resolveCamera();
+    await Promise.resolve();
+    expect(ui().cameras).toEqual(granted);
+    await f.setDevices([granted[0] as CameraDevice]);
+    expect(ui().cameras).toHaveLength(1);
+  });
+
+  it('keeps each camera’s capability report after it stops; lastDeviceId = what Automatic picked', async () => {
+    const { f, store, dispatch } = setup();
+    const ui = () => store.getState().ui;
+    dispatch({ type: 'GET_READY' });
+    const exposure = { supported: true, mode: 'manual', value: 100, range: { min: 1, max: 1000 } };
+    await f.resolveCamera({
+      ...info,
+      deviceId: 'cam-2',
+      label: 'Back',
+      exposure,
+      focus: { supported: false },
+    });
+    dispatch({ type: 'NAV_CONFIG' });
+    expect(ui().cameraInfo).toBeNull();
+    expect(ui().lastDeviceId).toBe('cam-2');
+    expect(ui().cameraCaps).toEqual({
+      'cam-2': { label: 'Back', facing: 'user', exposure, focus: { supported: false } },
+    });
   });
 
   it('logs ignored events in debug mode only', () => {

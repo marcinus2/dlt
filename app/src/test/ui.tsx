@@ -2,12 +2,12 @@ import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { Effects } from '../app/effects.ts';
 import { createAppStore, type StoreOptions } from '../app/store.ts';
-import type { CameraInfo, DetectorEngine } from '../engine/types.ts';
+import type { CameraDevice, CameraInfo, DetectorEngine } from '../engine/types.ts';
 import { createSettingsStorage, memoryBackend } from '../settings/storage.ts';
 import { StoreProvider } from '../ui/store.tsx';
 
 /** Effects that do nothing; the camera start never resolves unless `cameraLive` is set. */
-export function noopEffects(opts: { cameraLive?: CameraInfo } = {}): Effects {
+export function noopEffects(opts: { cameraLive?: CameraInfo; cameras?: CameraDevice[] } = {}): Effects {
   const engine = {
     start() {},
     stop() {},
@@ -31,6 +31,8 @@ export function noopEffects(opts: { cameraLive?: CameraInfo } = {}): Effects {
       stop() {},
       onFrame: () => () => {},
       onEnded: () => () => {},
+      listCameras: () => Promise.resolve(opts.cameras ?? []),
+      onDeviceChange: () => () => {},
     },
     engine,
     audio: {

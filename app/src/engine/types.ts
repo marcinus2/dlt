@@ -111,14 +111,31 @@ export interface CameraError {
   message: string;
 }
 
+export interface CameraDevice {
+  deviceId: string;
+  label: string;
+}
+
+/** A camera control (exposure, focus) after start: capability and the value the track reports. */
+export interface ControlReport {
+  supported: boolean;
+  mode?: string;
+  value?: number;
+  range?: { min: number; max: number };
+  error?: string;
+}
+
 export interface CameraInfo {
   width: number;
   height: number;
   fps: number | null;
   facing?: string;
   deviceId?: string;
+  label?: string;
   /** fpsExact could not be met; the camera runs at an `ideal` frame rate instead. */
   fpsFallback?: boolean;
+  exposure?: ControlReport;
+  focus?: ControlReport;
 }
 
 export interface FrameSource {

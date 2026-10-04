@@ -120,3 +120,49 @@ describe('primaryEvent (Space / Enter)', () => {
     expect(primaryEvent(r(initialState, { type: 'NAV_CONFIG' }))).toBeNull();
   });
 });
+
+describe('Configuration › Camera (M7)', () => {
+  const cameras = [
+    { deviceId: 'cam-1', label: 'Front camera' },
+    { deviceId: 'cam-2', label: 'Back camera' },
+  ];
+  const open = async (ui = {}) => {
+    const state = reduce(initialState, { type: 'NAV_CONFIG' }).state; // no screen transition
+    const store = testStore({ effects: noopEffects({ cameras }), ui, state });
+    renderWithStore(<App />, store);
+    await act(() => Promise.resolve()); // refreshCameras on mount
+    return store;
+  };
+  const picker = () => screen.getByLabelText('Device') as HTMLSelectElement;
+  const report = () => screen.getByTestId('camera-report').textContent ?? '';
+
+  it('lists the cameras on entry; Automatic = null; a saved camera that is gone stays selectable', async () => {
+    const store = await open();
+    expect([...picker().options].map((o) => o.text)).toEqual(['Automatic', 'Front camera', 'Back camera']);
+    fireEvent.change(picker(), { target: { value: 'cam-2' } });
+    expect(store.getState().draft.camera.deviceId).toBe('cam-2');
+    fireEvent.change(picker(), { target: { value: '' } });
+    expect(store.getState().draft.camera.deviceId).toBeNull();
+    act(() => store.getState().setDraft('camera.deviceId', 'gone'));
+    expect(picker().value).toBe('gone');
+    expect(picker().selectedOptions[0]?.text).toBe('Saved camera (not connected)');
+  });
+
+  it('capability per device: unknown until it ran; Automatic shows the last device', async () => {
+    const exposure = { supported: true, mode: 'manual', value: 100, range: { min: 1, max: 1250 } };
+    const store = await open({
+      cameraCaps: {
+        'cam-1': { label: 'Front camera', exposure: { supported: false }, focus: { supported: false } },
+        'cam-2': { label: 'Back camera', exposure, focus: { supported: true, mode: 'continuous', value: 0.25 } },
+      },
+      lastDeviceId: 'cam-1',
+    });
+    expect(report()).toMatch(/Front camera.*Exposure control\s*not supported/);
+    expect(screen.getByText(/Manual exposure is not supported on this camera/)).toBeTruthy();
+    act(() => store.getState().setDraft('camera.deviceId', 'cam-2'));
+    expect(report()).toContain('supported · manual 100 (range 1–1250)');
+    expect(report()).toContain('supported · continuous 0.25');
+    act(() => store.getState().setDraft('camera.deviceId', 'gone'));
+    expect(report()).toMatch(/show here once this camera has run/);
+  });
+});
