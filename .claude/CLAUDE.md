@@ -38,3 +38,4 @@ Any other dependency needs a reason in the PR. Allowed test-only additions: `@ax
 - Workflow: branch `v1/m<N>-<slug>`, PR into `main`, deploy on merge, check on a phone (footer shows version + git SHA).
 - Keep code and comments concise; match the existing style.
 - Never delete a git branch without the user's explicit acceptance first, even if it looks stale or merged.
+- Never add claude related info to git commit messages like: 'Co-Authored-By: Claude' 
