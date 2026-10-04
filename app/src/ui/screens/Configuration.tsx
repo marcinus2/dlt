@@ -1,16 +1,15 @@
-import { Bug, ChevronDown, LoaderCircle, Play, RotateCcw, Square, Volume2 } from 'lucide-react';
+import { ChevronDown, LoaderCircle, Play, RotateCcw, Square } from 'lucide-react';
 import { lazy, type ReactNode, Suspense, useEffect, useId, useState } from 'react';
 import type { ControlReport, Settings } from '../../engine/types.ts';
-import type { Cue } from '../../session/types.ts';
 import { GROUPS, type Group, getSetting, SCHEMA } from '../../settings/schema.ts';
 import { isDefault } from '../../settings/validate.ts';
 import { roiPreset, SettingField } from '../components/SettingField.tsx';
 import { TopBar } from '../components/TopBar.tsx';
 import { cx } from '../cx.ts';
-import { SpeechLatencyHud } from '../debug/Hud.tsx';
 import { useApp } from '../store.tsx';
 import { UpdateToast } from './UpdateToast.tsx';
 
+const Diagnostics = lazy(() => import('../debug/Diagnostics.tsx').then((m) => ({ default: m.Diagnostics })));
 const TestCalibrate = lazy(() =>
   import('../config/TestCalibrate.tsx').then((m) => ({ default: m.TestCalibrate })),
 );
@@ -47,6 +46,7 @@ function Disclosure({
   defaultOpen = false,
   level = 'group',
   onToggle,
+  mountWhenOpen = false,
   children,
 }: {
   title: string;
@@ -54,6 +54,8 @@ function Disclosure({
   defaultOpen?: boolean;
   level?: 'group' | 'advanced';
   onToggle?: (open: boolean) => void;
+  /** Render the content only while open (lazy panels with their own loops). */
+  mountWhenOpen?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -90,7 +92,7 @@ function Disclosure({
         </button>
       </h2>
       <div id={id} hidden={!open} className={cx(group && 'border-t border-border px-4 pb-2')}>
-        {children}
+        {(open || !mountWhenOpen) && children}
       </div>
     </section>
   );
@@ -140,7 +142,10 @@ function CameraReport() {
     { label: 'Focus control', text: controlText(caps.focus, (v) => String(+v.toFixed(2))) },
   ];
   return (
-    <div data-testid="camera-report" className="mt-2 mb-1 rounded-card bg-surface-2 px-3 py-2 text-sm">
+    <div
+      data-testid="camera-report"
+      className="mt-2 mb-1 rounded-card bg-surface-2 px-3 py-2 text-sm wrap-anywhere"
+    >
       <p className="font-semibold text-text">{caps.label || 'This camera'}</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-text-muted">
         {rows.map((r) => (
@@ -159,48 +164,9 @@ function CameraReport() {
   );
 }
 
-const SOUND_CHECK: { cue: Cue; label: string }[] = [
-  { cue: 'armed', label: 'Armed' },
-  { cue: 'go', label: 'Go' },
-  { cue: 'lap', label: 'Lap' },
-  { cue: 'best', label: 'Best' },
-  { cue: 'paused', label: 'Paused' },
-];
-
-/** Diagnostics: play each cue with the draft audio toggles (plan 6.2). */
-function SoundCheck() {
-  const testCue = useApp((s) => s.testCue);
-  return (
-    <div className="my-3 flex flex-col gap-2">
-      <p className="flex items-center gap-2 font-semibold text-text">
-        <Volume2 aria-hidden size={20} className="text-accent" />
-        Sound check
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {SOUND_CHECK.map(({ cue, label }) => (
-          <button
-            key={cue}
-            type="button"
-            onClick={() => testCue(cue)}
-            className="min-h-12 rounded-full border border-border px-4 font-semibold text-text hover:bg-surface-2"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <SpeechLatencyHud />
-    </div>
-  );
-}
-
-function Placeholder({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return (
-    <div className="my-3 flex items-start gap-3 rounded-card border border-dashed border-border bg-surface-2 px-4 py-3 text-text-muted">
-      {icon}
-      <div>{children}</div>
-    </div>
-  );
-}
+const Spinner = () => (
+  <LoaderCircle aria-hidden className="my-3 animate-spin text-text-muted motion-reduce:animate-none" />
+);
 
 /** Start / Stop test runs the tuning camera (G7) inside the tap; the panel is a lazy chunk. */
 function TestSection() {
@@ -285,12 +251,10 @@ export function Configuration() {
           );
         })}
         {debug && (
-          <Disclosure title="Diagnostics" summary="debug">
-            <SoundCheck />
-            <Placeholder icon={<Bug aria-hidden size={22} className="mt-0.5 shrink-0 text-accent" />}>
-              <p className="font-semibold text-text">Ratio graph, diff view, HUD, event log</p>
-              <p className="text-sm">File replay and CSV export arrive with the engine port.</p>
-            </Placeholder>
+          <Disclosure title="Diagnostics" summary="debug" mountWhenOpen>
+            <Suspense fallback={<Spinner />}>
+              <Diagnostics />
+            </Suspense>
           </Disclosure>
         )}
         {!valid && (

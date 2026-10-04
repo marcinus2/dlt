@@ -45,10 +45,22 @@ export interface AnalyzerTiming {
   guard: number;
 }
 
+/** Luma of the last two processed frames (debug diff view). Live buffers: read, don't keep. */
+export interface LumaPair {
+  latest: Uint8Array;
+  previous: Uint8Array;
+  width: number;
+  height: number;
+  /** false until two frames of the same crop exist. */
+  valid: boolean;
+}
+
 export interface Analyzer extends FrameAnalyzer {
   readonly timing: Readonly<AnalyzerTiming>;
   /** Current processing size of the ROI (debug). */
   readonly size: { readonly width: number; readonly height: number };
+  /** One reused object. */
+  luma(): Readonly<LumaPair>;
 }
 
 export interface AnalyzerOptions {
@@ -67,6 +79,7 @@ export function createFrameAnalyzer(opts: AnalyzerOptions = {}): Analyzer {
   const timing: AnalyzerTiming = { roi: 0, diff: 0, guard: 0 };
   const size = { width: 0, height: 0 };
   const crop = { sx: 0, sy: 0, sw: 1, sh: 1 };
+  let pairValid = false;
 
   let ctx: AnalyzerContext | null = null;
   let gctx: AnalyzerContext | null = null;
@@ -107,7 +120,10 @@ export function createFrameAnalyzer(opts: AnalyzerOptions = {}): Analyzer {
     }
   }
 
+  const pair: LumaPair = { latest: prev, previous: cur, width: 0, height: 0, valid: false };
+
   function neutral() {
+    pairValid = false;
     result.ratio = 0;
     result.globalRatio = 0;
     result.global = true;
@@ -160,6 +176,7 @@ export function createFrameAnalyzer(opts: AnalyzerOptions = {}): Analyzer {
     const meanCur = toLuma(ctx.getImageData(0, 0, w, h).data, cur);
     const t1 = now();
     const valid = hasPrev;
+    pairValid = valid;
     result.ratio = valid ? diffLuma(cur, prev, meanCur, meanPrev, s) / (w * h) : 0;
     const t2 = now();
     [cur, prev] = [prev, cur]; // swap, don't copy
@@ -193,9 +210,18 @@ export function createFrameAnalyzer(opts: AnalyzerOptions = {}): Analyzer {
   return {
     process,
     reset() {
-      hasPrev = gHasPrev = false;
+      hasPrev = gHasPrev = pairValid = false;
     },
     timing,
     size,
+    luma() {
+      // after process() swaps, `prev` holds the latest frame
+      pair.latest = prev;
+      pair.previous = cur;
+      pair.width = size.width;
+      pair.height = size.height;
+      pair.valid = pairValid;
+      return pair;
+    },
   };
 }

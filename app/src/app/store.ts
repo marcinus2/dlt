@@ -12,6 +12,7 @@ import type {
 } from '../engine/types.ts';
 import { DEFAULTS, type SettingKey, setSetting } from '../settings/schema.ts';
 import { equalSettings, type SettingErrors, validate } from '../settings/validate.ts';
+import type { Diagnostics } from './diagnostics.ts';
 import { createEffectRunner, type Effects, type SpeechLatency } from './effects.ts';
 import { type AppEvent, type AppState, type Cue, initialState, reduce } from './machine.ts';
 
@@ -103,6 +104,8 @@ export interface AppStore {
   refreshCameras(): void;
   /** Every engine frame (one reused object): draw outside React, never set state per sample. */
   onSample(cb: (s: Readonly<MotionSample>) => void): Unsubscribe;
+  /** Diagnostics (`?debug=1`, lazy chunk); the caller disposes it. */
+  loadDiagnostics(): Promise<Diagnostics>;
 }
 
 export interface StoreOptions {
@@ -191,6 +194,15 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
       testCue: runner.testCue,
       refreshCameras: runner.refreshCameras,
       onSample: (cb) => fx.engine.on('sample', cb),
+      loadDiagnostics: () =>
+        import('./diagnostics.ts').then((m) =>
+          m.createDiagnostics({
+            live: fx.engine,
+            targets: fx.diag ?? null,
+            settings: () => get().draft.detection,
+            liveInfo: () => get().ui.cameraInfo,
+          }),
+        ),
     };
   });
   return Object.assign(api, { resumeLive: () => resumeLive() });

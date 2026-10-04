@@ -10,13 +10,9 @@ import { CameraErrorCard } from '../components/CameraErrorCard.tsx';
 import { CameraLayer, useVideoSize } from '../components/CameraLayer.tsx';
 import { RoiOverlay } from '../components/RoiOverlay.tsx';
 import { useApp } from '../store.tsx';
+import { meterPos } from './meter.ts';
 
 const pct = (v: number) => `${+(v * 100).toPrecision(3)}%`;
-
-/** Meter scale: log10 from 0.01 % to 100 %. */
-const LOG_MIN = -4;
-export const meterPos = (r: number) =>
-  Math.min(1, Math.max(0, (Math.log10(Math.max(r, 10 ** LOG_MIN)) - LOG_MIN) / -LOG_MIN));
 
 /** Calibrated ratio → the field's range, 3 significant digits. */
 function fitRatio(key: SettingKey, v: number): number {

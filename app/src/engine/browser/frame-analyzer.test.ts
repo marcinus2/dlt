@@ -60,6 +60,19 @@ describe('FrameAnalyzer', () => {
     expect(run(solid(W, H, 100)).global).toBe(false);
   });
 
+  it('luma(): latest and previous frame of the crop, valid once a pair exists', () => {
+    expect(analyzer.luma().valid).toBe(false);
+    run(solid(W, H, 100));
+    expect(analyzer.luma().valid).toBe(false);
+    run(solid(W, H, 180));
+    const p = analyzer.luma();
+    expect(p).toMatchObject({ width: 160, height: 320, valid: true });
+    expect(p.latest[0]).toBe(180);
+    expect(p.previous[0]).toBe(100);
+    analyzer.reset();
+    expect(analyzer.luma().valid).toBe(false);
+  });
+
   it('reset() -> the next frame is neutral', () => {
     run(solid(W, H, 100));
     analyzer.reset();

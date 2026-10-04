@@ -1,17 +1,22 @@
-// Engine debug page (plan 4.10) on Chromium's fake camera (playwright.config.ts): the real
-// CameraSource → FrameAnalyzer → DetectorEngine path runs, and Stop leaves nothing running.
-import { expect, test } from '@playwright/test';
+// Configuration › Diagnostics (plan 7.5, `?debug=1`) on Chromium's fake camera: it watches the
+// Test & calibrate engine (real CameraSource → FrameAnalyzer → DetectorEngine), logs the clip's
+// passes, draws the diff view and exports CSV; Stop test leaves nothing running.
+import { expect, type Page, test } from '@playwright/test';
 
-const hudLine = async (page: import('@playwright/test').Page, key: string) =>
-  ((await page.locator('pre').textContent()) ?? '').split('\n').find((l) => l.startsWith(key)) ?? '';
+test.setTimeout(45_000);
 
-test('fake camera: frames processed, CSV export, Stop releases the camera', async ({ page }) => {
-  await page.goto('./?debug=engine');
-  await expect(page.getByRole('heading', { name: /Engine debug/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Start camera' }).click();
-  await expect(page.getByRole('list', { name: 'Event log' })).toContainText('CAMERA');
+const hudLine = async (page: Page, key: string) =>
+  ((await page.getByTestId('engine-hud').textContent()) ?? '').split('\n').find((l) => l.startsWith(key)) ??
+  '';
 
-  // fps climbs, frames are recorded, warm-up ends.
+test('diagnostics: HUD, event log, diff view, CSV export; Stop test stops the frames', async ({ page }) => {
+  await page.goto('./?debug=1');
+  await page.getByRole('button', { name: 'Configuration' }).click();
+  await page.getByRole('button', { name: /^Test & calibrate/ }).click();
+  await page.getByRole('button', { name: 'Start test' }).click();
+  await page.getByRole('button', { name: /^Diagnostics/ }).click();
+  await expect(page.getByTestId('engine-hud')).toContainText('live (Test & calibrate)');
+
   await expect
     .poll(async () => Number((await hudLine(page, 'fps')).split(/\s+/)[1]), { timeout: 10_000 })
     .toBeGreaterThan(5);
@@ -19,6 +24,12 @@ test('fake camera: frames processed, CSV export, Stop releases the camera', asyn
   await expect
     .poll(async () => Number((await hudLine(page, 'roi px')).match(/recorded (\d+)/)?.[1]))
     .toBeGreaterThan(30);
+  await expect(page.getByRole('list', { name: 'Event log' })).toContainText('MOTION END', {
+    timeout: 15_000,
+  });
+  expect(await page.getByRole('img', { name: /Diff view/ }).evaluate((c: HTMLCanvasElement) => c.width)).toBe(
+    160,
+  );
 
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Frames CSV' }).click();
@@ -27,18 +38,7 @@ test('fake camera: frames processed, CSV export, Stop releases the camera', asyn
   expect(lines[0]).toBe('t,ratio,globalRatio,global,state');
   expect(lines.length).toBeGreaterThan(30);
 
-  // Keep a handle on the stream, then check its tracks after Stop.
-  await page.evaluate(() => {
-    const w = window as unknown as { stream?: MediaStream };
-    w.stream = document.querySelector('video')?.srcObject as MediaStream;
-  });
-  await page.getByRole('button', { name: 'Stop' }).click();
-  const states = await page.evaluate(() => {
-    const w = window as unknown as { stream?: MediaStream };
-    return w.stream?.getTracks().map((t) => t.readyState);
-  });
-  expect(states).toEqual(['ended']);
-  // No more frames after Stop: once the HUD shows it, the recorded count stays put and fps decays to 0.
+  await page.getByRole('button', { name: 'Stop test' }).click();
   await expect.poll(() => hudLine(page, 'phase')).toMatch(/phase\s+stopped/);
   const frames = (await hudLine(page, 'roi px')).match(/recorded (\d+)/)?.[1];
   await expect.poll(() => hudLine(page, 'fps'), { timeout: 5_000 }).toMatch(/^fps\s+0\.0/);

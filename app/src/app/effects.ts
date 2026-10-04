@@ -1,7 +1,10 @@
 // Effect runner: executes reducer effects against injected implementations
 // (real engine from M5, sim/ before). Gesture-bound effects run synchronously.
 import type { Announcer } from '../audio/announcer.ts';
+import type { CameraSource } from '../engine/browser/camera-source.ts';
+import type { Analyzer } from '../engine/browser/frame-analyzer.ts';
 import { toCameraError } from '../engine/camera-error.ts';
+import type { Engine } from '../engine/engine.ts';
 import type {
   CameraDevice,
   CameraInfo,
@@ -30,6 +33,14 @@ export interface Effects {
   audio: Announcer;
   wakeLock: { acquire(): void; release(): void };
   settings: SettingsStorage;
+  /** Real pipeline internals for Diagnostics (plan 7.5); absent in sim. */
+  diag?: DiagTargets;
+}
+
+export interface DiagTargets {
+  engine: Engine;
+  analyzer: Analyzer;
+  camera: CameraSource;
 }
 
 /** What the runner needs from the store. */

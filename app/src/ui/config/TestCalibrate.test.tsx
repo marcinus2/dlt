@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { type AppEvent, initialState, reduce } from '../../app/machine.ts';
 import type { MotionSample } from '../../engine/types.ts';
 import { noopEffects, renderWithStore, testStore } from '../../test/ui.tsx';
-import { meterPos, TestCalibrate } from './TestCalibrate.tsx';
+import { meterPos } from './meter.ts';
+import { TestCalibrate } from './TestCalibrate.tsx';
 
 const tuningLive = () =>
   (['NAV_CONFIG', 'TUNE_START', 'CAMERA_LIVE'] as AppEvent['type'][]).reduce(
