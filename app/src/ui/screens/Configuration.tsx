@@ -1,5 +1,5 @@
-import { Bug, ChevronDown, FlaskConical, RotateCcw, Volume2 } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useState } from 'react';
+import { Bug, ChevronDown, LoaderCircle, Play, RotateCcw, Square, Volume2 } from 'lucide-react';
+import { lazy, type ReactNode, Suspense, useEffect, useId, useState } from 'react';
 import type { ControlReport, Settings } from '../../engine/types.ts';
 import type { Cue } from '../../session/types.ts';
 import { GROUPS, type Group, getSetting, SCHEMA } from '../../settings/schema.ts';
@@ -10,6 +10,10 @@ import { cx } from '../cx.ts';
 import { SpeechLatencyHud } from '../debug/Hud.tsx';
 import { useApp } from '../store.tsx';
 import { UpdateToast } from './UpdateToast.tsx';
+
+const TestCalibrate = lazy(() =>
+  import('../config/TestCalibrate.tsx').then((m) => ({ default: m.TestCalibrate })),
+);
 
 const sec = (ms: number) => `${+(ms / 1000).toFixed(1)} s`;
 const pct = (v: number) => `${+(v * 100).toPrecision(3)}%`;
@@ -42,12 +46,14 @@ function Disclosure({
   summary,
   defaultOpen = false,
   level = 'group',
+  onToggle,
   children,
 }: {
   title: string;
   summary?: string;
   defaultOpen?: boolean;
   level?: 'group' | 'advanced';
+  onToggle?: (open: boolean) => void;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -60,7 +66,10 @@ function Disclosure({
           type="button"
           aria-expanded={open}
           aria-controls={id}
-          onClick={() => setOpen(!open)}
+          onClick={() => {
+            setOpen(!open);
+            onToggle?.(!open);
+          }}
           className={cx(
             'flex w-full items-center gap-3 text-left',
             group ? 'min-h-16 px-4 text-lg font-bold' : 'min-h-12 font-semibold text-text-muted',
@@ -193,6 +202,40 @@ function Placeholder({ icon, children }: { icon: ReactNode; children: ReactNode 
   );
 }
 
+/** Start / Stop test runs the tuning camera (G7) inside the tap; the panel is a lazy chunk. */
+function TestSection() {
+  const tuning = useApp((s) => s.state.tuning);
+  const dispatch = useApp((s) => s.dispatch);
+  return (
+    <div className="my-3 flex flex-col gap-3">
+      <p className="text-sm text-text-muted">
+        Live preview with these settings, a motion meter and <b className="text-text">Calibrate</b>, which
+        watches the empty scene and sets the start and end ratio. Camera changes apply on the next start.
+      </p>
+      <button
+        type="button"
+        onClick={() => dispatch({ type: tuning ? 'TUNE_STOP' : 'TUNE_START' })}
+        className={cx(
+          'inline-flex min-h-12 items-center gap-2 self-start rounded-full px-5 font-semibold',
+          tuning ? 'border border-border text-text hover:bg-surface-2' : 'bg-accent text-accent-ink',
+        )}
+      >
+        {tuning ? <Square aria-hidden size={18} /> : <Play aria-hidden size={18} />}
+        {tuning ? 'Stop test' : 'Start test'}
+      </button>
+      {tuning && (
+        <Suspense
+          fallback={
+            <LoaderCircle aria-hidden className="animate-spin text-text-muted motion-reduce:animate-none" />
+          }
+        >
+          <TestCalibrate />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
 /** Configuration (spec §3.1): all groups from the schema, Advanced collapsed, draft / Save / discard. */
 export function Configuration() {
   const draft = useApp((s) => s.draft);
@@ -202,6 +245,8 @@ export function Configuration() {
   const debug = useApp((s) => s.debug);
   const voiceAvailable = useApp((s) => s.ui.voiceAvailable);
   const refreshCameras = useApp((s) => s.refreshCameras);
+  const tuning = useApp((s) => s.state.tuning);
+  const dispatch = useApp((s) => s.dispatch);
   useEffect(refreshCameras, [refreshCameras]);
 
   return (
@@ -217,24 +262,13 @@ export function Configuration() {
               title={g.title}
               summary={groupSummary(g.id, draft)}
               defaultOpen={g.id === 'camera' || g.id === 'detection'}
+              onToggle={
+                g.id === 'calibration'
+                  ? (open) => !open && tuning && dispatch({ type: 'TUNE_STOP' })
+                  : undefined
+              }
             >
-              {g.id === 'calibration' && (
-                <Placeholder
-                  icon={<FlaskConical aria-hidden size={22} className="mt-0.5 shrink-0 text-accent" />}
-                >
-                  <p className="font-semibold text-text">Live preview, ratio meter and Calibrate</p>
-                  <p className="text-sm">
-                    Arrive with real detection. Calibrate will set the start and end ratio.
-                  </p>
-                  <button
-                    type="button"
-                    disabled
-                    className="mt-2 min-h-12 rounded-full border border-border px-5 font-semibold text-text disabled:opacity-50"
-                  >
-                    Calibrate
-                  </button>
-                </Placeholder>
-              )}
+              {g.id === 'calibration' && <TestSection />}
               {g.id === 'audio' && !voiceAvailable && (
                 <p role="status" className="mt-3 text-sm font-semibold text-warn">
                   Voice not available on this device — beeps only.

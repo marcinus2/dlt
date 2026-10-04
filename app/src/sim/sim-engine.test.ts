@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DetectorEvent, EnginePhase, FrameSource, PassEvent } from '../engine/types.ts';
 import { DEFAULTS } from '../settings/schema.ts';
-import { createSimEngine, SIM_FIRST_PASS_MS, SIM_MOTION_MS, type SimEngine } from './sim-engine.ts';
+import {
+  createSimEngine,
+  SIM_FIRST_PASS_MS,
+  SIM_MOTION_MS,
+  SIM_SAMPLE_MS,
+  type SimEngine,
+} from './sim-engine.ts';
 
 /** Manual clock + timer queue. */
 function fakeClock() {
@@ -199,6 +205,27 @@ describe('SimEngine', () => {
     off();
     engine.start(source, detection);
     expect(got).toEqual([]);
+  });
+
+  it('samples at ~30 fps only while running and listened to; motion raises the ratio', () => {
+    engine.start(source, detection);
+    expect(clock.pending()).toBe(1); // warm-up only: nobody listens to samples
+    const ratios: number[] = [];
+    const off = engine.on('sample', (x) => ratios.push(x.ratio));
+    clock.advance(SIM_SAMPLE_MS * 10);
+    expect(ratios).toHaveLength(10);
+    expect(Math.max(...ratios)).toBeLessThan(0.005);
+    clock.advance(2000);
+    engine.pass();
+    ratios.length = 0;
+    clock.advance(SIM_SAMPLE_MS);
+    expect(ratios[0]).toBeGreaterThan(0.05);
+    engine.stop();
+    ratios.length = 0;
+    clock.advance(1000);
+    expect(ratios).toEqual([]);
+    expect(clock.pending()).toBe(0);
+    off();
   });
 
   it('fake stats with a low-fps switch', () => {
