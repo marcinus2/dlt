@@ -109,6 +109,8 @@ export interface EngineStats {
 export interface CameraError {
   kind: 'permission' | 'notFound' | 'busy' | 'overconstrained' | 'insecure' | 'ended' | 'unknown';
   message: string;
+  /** permission only: true = blocked in the settings, false = prompt dismissed; unset = unknown. */
+  blocked?: boolean;
 }
 
 export interface CameraDevice {
@@ -134,6 +136,8 @@ export interface CameraInfo {
   label?: string;
   /** fpsExact could not be met; the camera runs at an `ideal` frame rate instead. */
   fpsFallback?: boolean;
+  /** The saved deviceId wasn't found; another camera runs instead. */
+  deviceFallback?: boolean;
   exposure?: ControlReport;
   focus?: ControlReport;
 }

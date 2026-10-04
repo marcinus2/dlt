@@ -14,7 +14,9 @@ import type {
 import { DEFAULTS, setSetting } from '../settings/schema.ts';
 import { createSettingsStorage, memoryBackend } from '../settings/storage.ts';
 import {
+  deviceFallbackToast,
   type Effects,
+  FPS_FALLBACK_TOAST,
   latencyWindow,
   lowFpsTracker,
   SAMPLE_LAP_MS,
@@ -48,6 +50,10 @@ function fakeEffects() {
   let lockCb: ((locked: boolean) => void) | null = null;
   let devices: CameraDevice[] = [{ deviceId: 'cam-1', label: '' }];
   let deviceChange: (() => void) | null = null;
+  let wakeLockCb: ((held: boolean) => void) | null = null;
+  let visibilityCb: ((visible: boolean) => void) | null = null;
+  let permission: PermissionState | null = null;
+  const guard: boolean[] = [];
 
   const engine = {
     start: (_src: unknown, s: DetectionSettings) => {
@@ -107,7 +113,22 @@ function fakeEffects() {
       onVoiceChange: () => () => {},
       voiceAvailable: () => true,
     },
-    wakeLock: { acquire: () => log.push('wakeLock.acquire'), release: () => log.push('wakeLock.release') },
+    wakeLock: {
+      acquire: () => log.push('wakeLock.acquire'),
+      release: () => log.push('wakeLock.release'),
+      onChange: (cb) => {
+        wakeLockCb = cb;
+        return () => {};
+      },
+    },
+    platform: {
+      onVisibility: (cb) => {
+        visibilityCb = cb;
+        return () => {};
+      },
+      cameraPermission: () => Promise.resolve(permission),
+      unloadGuard: (on) => guard.push(on),
+    },
     settings: { load: storage.load, save: (s) => (saveFails ? false : storage.save(s)) },
   };
 
@@ -148,10 +169,20 @@ function fakeEffects() {
     },
     rejectCamera: async (e: unknown) => {
       pending?.reject(e);
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
     },
+    setWakeLock: (held: boolean) => wakeLockCb?.(held),
+    setVisible: (visible: boolean) => visibilityCb?.(visible),
+    setPermission: (state: PermissionState | null) => {
+      permission = state;
+    },
+    guard,
   };
+}
+
+/** Enough microtask turns for start() rejection → permission query → dispatch. */
+async function flush() {
+  for (let i = 0; i < 5; i++) await Promise.resolve();
 }
 
 function setup() {
@@ -199,8 +230,8 @@ describe('store + effect runner', () => {
   it('camera start failure → CAMERA_ERROR with the mapped kind', async () => {
     const { f, dispatch, state } = setup();
     dispatch({ type: 'GET_READY' });
-    await f.rejectCamera({ name: 'NotAllowedError', message: 'Permission denied' });
-    expect(state().camera).toEqual({ error: { kind: 'permission', message: 'Permission denied' } });
+    await f.rejectCamera({ name: 'NotReadableError', message: 'Device in use' });
+    expect(state().camera).toEqual({ error: { kind: 'busy', message: 'Device in use' } });
   });
 
   it('a camera start that finishes after camera.stop is dropped', async () => {
@@ -454,6 +485,112 @@ describe('audio wiring (M6)', () => {
     store.getState().testCue('go');
     expect(f.log).toEqual(['audio.unlock', `cue:best:${SAMPLE_LAP_MS}`, 'audio.unlock', 'cue:go']);
     expect(f.cueSettings[0]).toEqual({ ...DEFAULTS.audio, voice: false });
+  });
+});
+
+describe('platform wiring (M8)', () => {
+  const denied = { name: 'NotAllowedError', message: 'Permission denied' };
+
+  it.each([
+    ['denied', { blocked: true }],
+    ['prompt', { blocked: false }],
+    [null, {}],
+  ] as const)('permission error with permission state %s → %o', async (permState, extra) => {
+    const { f, dispatch, state } = setup();
+    f.setPermission(permState);
+    dispatch({ type: 'GET_READY' });
+    await f.rejectCamera(denied);
+    expect(state().camera).toEqual({ error: { kind: 'permission', message: 'Permission denied', ...extra } });
+  });
+
+  it('a permission answer that arrives after leaving Get Ready is dropped', async () => {
+    const { f, dispatch, state } = setup();
+    dispatch({ type: 'GET_READY' });
+    let answer: (s: PermissionState | null) => void = () => {};
+    f.effects.platform.cameraPermission = () => new Promise((r) => (answer = r));
+    await f.rejectCamera(denied);
+    expect(state().camera).toBe('starting'); // waiting for the permission query
+    dispatch({ type: 'NAV_NEW_SESSION' });
+    answer('denied');
+    await flush();
+    expect(state()).toMatchObject({ screen: 'welcome', camera: 'off' });
+  });
+
+  it('visibility → APP_HIDDEN / APP_VISIBLE: auto-pause mid-session with the paused cue', async () => {
+    const { f, dispatch, state } = await inSession();
+    f.emitPass(pass(1000));
+    f.setVisible(false);
+    expect(state()).toMatchObject({ screen: 'paused', pauseReason: 'hidden' });
+    expect(f.log.slice(-3)).toEqual(['engine.stop', 'camera.stop', 'cue:paused']);
+    expect(f.log).not.toContain('wakeLock.release'); // kept through Paused (spec §2.2)
+    f.setVisible(true);
+    expect(state().screen).toBe('paused'); // G5
+    dispatch({ type: 'CONTINUE' });
+    expect(state().screen).toBe('session');
+  });
+
+  it('visibility on Get Ready stops the camera and restarts it on return', async () => {
+    const { f, dispatch, state } = setup();
+    dispatch({ type: 'GET_READY' });
+    await f.resolveCamera();
+    f.setVisible(false);
+    expect(state().camera).toBe('off');
+    f.setVisible(true);
+    expect(state().camera).toBe('starting');
+    expect(f.log.filter((l) => l === 'camera.start')).toHaveLength(2);
+  });
+
+  it('wake lock: unavailable shows the banner, held clears it; dismissed stays dismissed', () => {
+    const { f, store } = setup();
+    const banner = () => store.getState().ui.wakeLockBanner;
+    f.setWakeLock(false);
+    expect(banner()).toBe(true);
+    f.setWakeLock(true);
+    expect(banner()).toBe(false);
+    f.setWakeLock(false);
+    store.getState().dismissWakeLockBanner();
+    expect(banner()).toBe(false);
+    f.setWakeLock(false); // re-acquire on return fails again
+    expect(banner()).toBe(false);
+  });
+
+  it('beforeunload guard follows "has data": on after the first pass, off on leaving', async () => {
+    const { f, dispatch } = await inSession();
+    expect(f.guard.at(-1)).toBe(false); // empty session
+    f.emitPass(pass(1000));
+    expect(f.guard.at(-1)).toBe(true);
+    dispatch({ type: 'STOP' });
+    expect(f.guard.at(-1)).toBe(false); // standby, no laps: nothing to lose
+    dispatch({ type: 'CONTINUE' });
+    await f.resolveCamera();
+    f.emitPhase('armed');
+    f.emitPass(pass(5000));
+    f.emitPass(pass(9000));
+    expect(f.guard.at(-1)).toBe(true);
+    dispatch({ type: 'STOP' });
+    expect(f.guard.at(-1)).toBe(true); // a lap is kept
+    dispatch({ type: 'END' });
+    dispatch({ type: 'CONFIRM' });
+    expect(f.guard.at(-1)).toBe(false);
+  });
+
+  it('fallback toasts (fps, saved camera gone) once per saved settings', async () => {
+    const { f, store, dispatch } = setup();
+    dispatch({ type: 'GET_READY' });
+    await f.resolveCamera({ ...info, fpsFallback: true });
+    expect(store.getState().ui.toast?.text).toBe(FPS_FALLBACK_TOAST);
+    store.getState().dismissToast(store.getState().ui.toast?.id ?? 0);
+    dispatch({ type: 'START' });
+    dispatch({ type: 'STOP' });
+    dispatch({ type: 'CONTINUE' });
+    await f.resolveCamera({ ...info, fpsFallback: true });
+    expect(store.getState().ui.toast).toBeNull();
+    dispatch({ type: 'END' });
+    dispatch({ type: 'NAV_CONFIG' });
+    dispatch({ type: 'SAVE' });
+    dispatch({ type: 'GET_READY' });
+    await f.resolveCamera({ ...info, label: 'Back camera', deviceFallback: true });
+    expect(store.getState().ui.toast?.text).toBe(deviceFallbackToast('Back camera'));
   });
 });
 

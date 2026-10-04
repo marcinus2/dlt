@@ -82,12 +82,13 @@ export function constraintsFor(s: CameraSettings, a: Attempt): MediaStreamConstr
 export async function openStream(
   md: MediaDevicesLike,
   s: CameraSettings,
-): Promise<{ stream: MediaStream; fpsFallback: boolean }> {
+): Promise<{ stream: MediaStream; fpsFallback: boolean; deviceFallback: boolean }> {
   const a: Attempt = { device: s.deviceId !== null, facing: true, fpsExact: s.fpsExact };
   let fpsFallback = false;
   for (;;) {
     try {
-      return { stream: await md.getUserMedia(constraintsFor(s, a)), fpsFallback };
+      const stream = await md.getUserMedia(constraintsFor(s, a));
+      return { stream, fpsFallback, deviceFallback: s.deviceId !== null && !a.device };
     } catch (err) {
       const { name, constraint } = (err ?? {}) as { name?: string; constraint?: string };
       const over = name === 'OverconstrainedError';
@@ -255,6 +256,7 @@ export function createCameraSource(opts: CameraSourceOptions = {}): CameraSource
         deviceId: ts.deviceId,
         label: track?.label || undefined,
         fpsFallback: opened.fpsFallback,
+        deviceFallback: opened.deviceFallback,
         ...(exposure ? { exposure } : {}),
         ...(focus ? { focus } : {}),
       };

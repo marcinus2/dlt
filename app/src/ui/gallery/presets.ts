@@ -81,6 +81,12 @@ export const PRESETS: Preset[] = [
     group: 'Get Ready',
     events: [...GET_READY, { type: 'CAMERA_ERROR', error: errorOf(kind) } as AppEvent],
   })),
+  {
+    id: 'cameraError-permissionPrompt',
+    title: 'Camera error: permission not decided',
+    group: 'Get Ready',
+    events: [...GET_READY, { type: 'CAMERA_ERROR', error: { ...errorOf('permission'), blocked: false } }],
+  },
 
   { id: 'arming', title: 'Arming', group: 'Session', events: ARMING },
   { id: 'standby', title: 'Stand-by', group: 'Session', events: STANDBY },

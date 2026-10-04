@@ -25,6 +25,11 @@ export interface ErrorCopy {
 export function cameraErrorCopy(e: CameraError, platform: Platform = detectPlatform()): ErrorCopy {
   switch (e.kind) {
     case 'permission':
+      if (e.blocked === false)
+        return {
+          title: 'Camera not allowed yet',
+          body: `Tap Retry and choose Allow when the browser asks. No prompt? ${PERMISSION_STEPS[platform]}`,
+        };
       return {
         title: 'Camera blocked',
         body: `Allow camera access, then tap Retry. ${PERMISSION_STEPS[platform]}`,
