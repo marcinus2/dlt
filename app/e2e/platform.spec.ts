@@ -193,7 +193,8 @@ test.describe('real camera', () => {
 
     // A revoked permission or unplugged camera ends the track; stop() alone fires no `ended`.
     await page.evaluate(() => {
-      const track = (document.querySelector('video')?.srcObject as MediaStream).getVideoTracks()[0];
+      const stream = document.querySelector('video')?.srcObject as MediaStream | null;
+      const track = stream?.getVideoTracks()[0];
       track?.stop();
       track?.dispatchEvent(new Event('ended'));
     });
