@@ -1,9 +1,10 @@
 // Simulation mode wiring (G11): SimEngine + SimCamera behind the real Effects interface.
-// Sound comes from the real announcer (M6); wake lock only logs until M8. Loaded as a lazy chunk.
-import type { Effects } from '../app/effects.ts';
+// Sound (M6), wake lock and platform glue (M8) are the real ones. Loaded as a lazy chunk.
+import type { Effects, PlatformPort, WakeLockPort } from '../app/effects.ts';
 import type { SimControls } from '../app/store.ts';
 import { type Announcer, loggedAnnouncer } from '../audio/announcer.ts';
 import type { Ms } from '../engine/types.ts';
+import { loggedWakeLock } from '../platform/wake-lock.ts';
 import type { SettingsStorage } from '../settings/storage.ts';
 import { createSimCamera } from './sim-camera.ts';
 import { createSimEngine } from './sim-engine.ts';
@@ -11,6 +12,8 @@ import { createSimEngine } from './sim-engine.ts';
 export interface SimOptions {
   settings: SettingsStorage;
   audio: Announcer;
+  wakeLock: WakeLockPort;
+  platform: PlatformPort;
   /** false = placeholder camera only (gallery, e2e: `?cam=fake`). */
   realCamera?: boolean;
   /** Fixed lap time (`?lap=<s>`); default 10–15 s random. */
@@ -39,7 +42,8 @@ export function createSim(opts: SimOptions): { effects: Effects; controls: SimCo
     camera,
     engine,
     audio: loggedAnnouncer(opts.audio, log),
-    wakeLock: { acquire: () => log('wakeLock.acquire'), release: () => log('wakeLock.release') },
+    wakeLock: loggedWakeLock(opts.wakeLock, log),
+    platform: opts.platform,
     settings: opts.settings,
   };
   const controls: SimControls = {

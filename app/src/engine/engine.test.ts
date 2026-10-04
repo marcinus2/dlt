@@ -327,6 +327,35 @@ describe('DetectorEngine', () => {
     expect(got).toEqual([true, false, true, false]);
   });
 
+  it('with the real analyzer: rotating an armed engine (new size, new content) gives no pass (plan 8.5)', () => {
+    const { factory } = fakeContexts();
+    let t = 0;
+    const e = createDetectorEngine({ analyzer: createFrameAnalyzer({ context: factory }), now: () => t });
+    const fs = fakeSource();
+    const got: (DetectorEvent | PassEvent)[] = [];
+    const ratios: number[] = [];
+    e.on('event', (x) => got.push(x));
+    e.on('pass', (x) => got.push(x));
+    e.on('sample', (x) => ratios.push(x.ratio));
+    const phase: EnginePhase[] = [];
+    e.on('phase', (p) => phase.push(p));
+    Object.assign(fs.video, solid(240, 480, 60));
+    e.start(fs.source, s);
+    const frames = (n: number) => {
+      for (let i = 0; i < n; i++) {
+        t += 100;
+        fs.frame(100);
+      }
+    };
+    frames(8);
+    expect(phase).toContain('armed');
+    // Turned over: other size, other scene. Without the reset the scene change alone is motion.
+    Object.assign(fs.video, solid(480, 240, 200), { videoWidth: 480, videoHeight: 240 });
+    frames(20);
+    expect(got).toEqual([]);
+    expect(Math.max(...ratios)).toBe(0);
+  });
+
   it('with the real analyzer: a preset via update() moves the crop and resizes the buffers', () => {
     const { factory, created } = fakeContexts();
     const a = createFrameAnalyzer({ context: factory });

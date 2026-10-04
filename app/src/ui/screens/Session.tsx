@@ -26,7 +26,7 @@ function Banners({ paused }: { paused: boolean }) {
   const camera = useApp((s) => s.state.camera);
   const audioLocked = useApp((s) => s.ui.audioLocked && (s.saved.audio.beep || s.saved.audio.voice));
   const wakeLockBanner = useApp((s) => s.ui.wakeLockBanner);
-  const setUi = useApp((s) => s.setUi);
+  const dismissWakeLock = useApp((s) => s.dismissWakeLockBanner);
   const unlockAudio = useApp((s) => s.unlockAudio);
   const pause = paused ? pauseBanner(reason, typeof camera === 'object' ? camera.error : null) : null;
   if (!pause && !audioLocked && !wakeLockBanner) return null;
@@ -47,7 +47,7 @@ function Banners({ paused }: { paused: boolean }) {
         />
       )}
       {wakeLockBanner && (
-        <Banner tone="info" title="Screen may turn off" onDismiss={() => setUi({ wakeLockBanner: false })}>
+        <Banner tone="info" title="Screen may turn off" onDismiss={dismissWakeLock}>
           Set Auto-Lock to Never during sessions.
         </Banner>
       )}

@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { createRealEffects } from './app/real.ts';
 import { type AppStoreApi, createAppStore, type StoreOptions } from './app/store.ts';
 import { createAnnouncer } from './audio/announcer.ts';
+import { createBrowserPlatform } from './platform/index.ts';
+import { lockPortrait } from './platform/orientation.ts';
 import { createSettingsStorage, memoryBackend } from './settings/storage.ts';
 import { App } from './ui/App.tsx';
 import { StoreProvider } from './ui/store.tsx';
@@ -21,8 +23,11 @@ const reactRoot = createRoot(root);
 
 async function boot(): Promise<AppStoreApi> {
   const gallery = presetId !== null; // G12: sim-backed, placeholder camera, never touches saved settings
+  const platform = createBrowserPlatform();
+  lockPortrait();
   if (!sim && !gallery) {
     const effects = createRealEffects({
+      ...platform,
       settings: createSettingsStorage(),
       log: debug ? (msg) => console.info(`[fx] ${msg}`) : undefined,
     });
@@ -34,6 +39,7 @@ async function boot(): Promise<AppStoreApi> {
   ]);
   // Sim-only flags: `?cam=fake` placeholder camera, `?auto=0`, `?lap=<s>`.
   const { effects, controls } = createSim({
+    ...platform,
     settings: createSettingsStorage(gallery ? memoryBackend() : undefined),
     audio: createAnnouncer(),
     realCamera: !gallery && params.get('cam') !== 'fake',

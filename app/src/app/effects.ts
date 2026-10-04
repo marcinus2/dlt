@@ -16,6 +16,7 @@ import type {
   Settings,
   Unsubscribe,
 } from '../engine/types.ts';
+import { withPermission } from '../platform/permissions.ts';
 import type { SettingsStorage } from '../settings/storage.ts';
 import type { AppEvent, AppState, Cue, Effect } from './machine.ts';
 
@@ -27,11 +28,27 @@ export interface CameraPort extends FrameSource {
   onDeviceChange(cb: () => void): Unsubscribe;
 }
 
+export interface WakeLockPort {
+  acquire(): void;
+  release(): void;
+  /** Lock obtained (true), or unsupported / rejected (false) while wanted. */
+  onChange(cb: (held: boolean) => void): Unsubscribe;
+}
+
+/** Browser glue of M8 (src/platform). */
+export interface PlatformPort {
+  onVisibility(cb: (visible: boolean) => void): Unsubscribe;
+  cameraPermission(): Promise<PermissionState | null>;
+  /** `beforeunload` prompt on / off. */
+  unloadGuard(on: boolean): void;
+}
+
 export interface Effects {
   camera: CameraPort;
   engine: DetectorEngine;
   audio: Announcer;
-  wakeLock: { acquire(): void; release(): void };
+  wakeLock: WakeLockPort;
+  platform: PlatformPort;
   settings: SettingsStorage;
   /** Real pipeline internals for Diagnostics (plan 7.5); absent in sim. */
   diag?: DiagTargets;
@@ -53,6 +70,8 @@ export interface RunnerHost {
   reverted(): void;
   cameraInfo(info: CameraInfo | null): void;
   cameras(list: CameraDevice[]): void;
+  toast(text: string): void;
+  wakeLock(held: boolean): void;
   passFlash(): void;
   stats(stats: EngineStats | null, lowFps: boolean): void;
   audioLocked(locked: boolean): void;
@@ -70,6 +89,10 @@ export interface SpeechLatency {
 export const LATENCY_WINDOW = 20;
 /** Lap time spoken by the Diagnostics sound check. */
 export const SAMPLE_LAP_MS = 12340;
+
+export const FPS_FALLBACK_TOAST = 'Exact fps not supported — using best available';
+export const deviceFallbackToast = (label?: string) =>
+  `Saved camera not found — using ${label || 'another camera'}`;
 
 export { toCameraError };
 
@@ -115,6 +138,8 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
   const latency = latencyWindow();
   /** MOTION_END frame time of the pass being dispatched; its cue starts the latency probe. */
   let passT: Ms | null = null;
+  /** Fallback toasts once per saved settings, not on every CONTINUE. */
+  let fallbackShown = { fps: false, device: false };
 
   const settingsFor = (draft?: true) => (draft ? host.draft() : host.saved());
 
@@ -127,6 +152,8 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
   fx.camera.onDeviceChange(refreshCameras);
   fx.audio.onLockChange(host.audioLocked);
   fx.audio.onVoiceChange(host.voiceAvailable);
+  fx.wakeLock.onChange(host.wakeLock);
+  fx.platform.onVisibility((visible) => host.dispatch({ type: visible ? 'APP_VISIBLE' : 'APP_HIDDEN' }));
 
   /** New engine run: listeners of older runs drop their events. */
   function subscribe() {
@@ -169,12 +196,31 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
         if (gen !== cameraGen) return;
         host.cameraInfo(info);
         refreshCameras();
+        fallbackToasts(info);
         onLive();
       },
       (err: unknown) => {
-        if (gen === cameraGen) host.dispatch({ type: 'CAMERA_ERROR', error: toCameraError(err) });
+        if (gen !== cameraGen) return;
+        const error = toCameraError(err);
+        if (error.kind !== 'permission') return host.dispatch({ type: 'CAMERA_ERROR', error });
+        // Blocked vs not yet decided (spec §3.4); the query never rejects.
+        fx.platform.cameraPermission().then((state) => {
+          if (gen === cameraGen) host.dispatch({ type: 'CAMERA_ERROR', error: withPermission(error, state) });
+        });
       },
     );
+  }
+
+  /** Spec §3.4: fpsExact retried with `ideal`; saved deviceId gone → another camera. */
+  function fallbackToasts(info: CameraInfo) {
+    if (info.fpsFallback && !fallbackShown.fps) {
+      fallbackShown.fps = true;
+      host.toast(FPS_FALLBACK_TOAST);
+    }
+    if (info.deviceFallback && !fallbackShown.device) {
+      fallbackShown.device = true;
+      host.toast(deviceFallbackToast(info.label));
+    }
   }
 
   function run(e: Effect) {
@@ -219,6 +265,7 @@ export function createEffectRunner(fx: Effects, host: RunnerHost) {
         fx.wakeLock.release();
         break;
       case 'settings.commit':
+        fallbackShown = { fps: false, device: false };
         host.committed(fx.settings.save(host.draft()));
         break;
       case 'settings.revert':

@@ -10,6 +10,7 @@ import type {
   Settings,
   Unsubscribe,
 } from '../engine/types.ts';
+import { hasData } from '../session/laps.ts';
 import { DEFAULTS, type SettingKey, setSetting } from '../settings/schema.ts';
 import { equalSettings, type SettingErrors, validate } from '../settings/validate.ts';
 import type { Diagnostics } from './diagnostics.ts';
@@ -40,7 +41,8 @@ export interface UiState {
   audioLocked: boolean;
   voiceAvailable: boolean;
   speechLatency: SpeechLatency | null;
-  wakeLockBanner: boolean; // M8
+  /** Wake lock unsupported or rejected (spec §2.2); dismissible. */
+  wakeLockBanner: boolean;
   updateAvailable: boolean; // M9
   install: 'none' | 'prompt' | 'iosHint'; // M9
 }
@@ -98,6 +100,8 @@ export interface AppStore {
   showToast(text: string): void;
   dismissToast(id: number): void;
   setUi(patch: Partial<UiState>): void;
+  /** Hides the wake-lock banner for the rest of the page life. */
+  dismissWakeLockBanner(): void;
   /** Inside a tap handler only. */
   unlockAudio(): void;
   testCue(cue: Cue): void;
@@ -124,6 +128,7 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
   const saved = fx.settings.load();
   const draft = opts.draft ?? saved;
   let toastId = 0;
+  let wakeLockDismissed = false;
   let resumeLive: () => void = () => {};
 
   const api = createStore<AppStore>()((set, get) => {
@@ -145,6 +150,8 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
         get().setUi({ cameraInfo, cameraCaps: caps, lastDeviceId: id });
       },
       cameras: (cameras) => get().setUi({ cameras }),
+      toast: (text) => get().showToast(text),
+      wakeLock: (held) => get().setUi({ wakeLockBanner: !held && !wakeLockDismissed }),
       passFlash: () => get().setUi({ passFlash: get().ui.passFlash + 1 }),
       stats: (stats, lowFps) => get().setUi({ stats, lowFps }),
       audioLocked: (audioLocked) => get().setUi({ audioLocked }),
@@ -174,8 +181,10 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
       dispatch(e) {
         const prev = get().state;
         const { state, effects } = reduce(prev, e);
-        if (state !== prev) set({ state });
-        else if (get().debug && effects.length === 0)
+        if (state !== prev) {
+          set({ state });
+          if (state.session !== prev.session) fx.platform.unloadGuard(hasData(state.session));
+        } else if (get().debug && effects.length === 0)
           console.debug(`[machine] ${prev.screen}: ignored ${e.type}`);
         for (const effect of effects) runner.run(effect);
       },
@@ -190,6 +199,10 @@ export function createAppStore(opts: StoreOptions): StoreApi<AppStore> & { resum
         if (get().ui.toast?.id === id) get().setUi({ toast: null });
       },
       setUi: (patch) => set({ ui: { ...get().ui, ...patch } }),
+      dismissWakeLockBanner: () => {
+        wakeLockDismissed = true;
+        get().setUi({ wakeLockBanner: false });
+      },
       unlockAudio: runner.unlockAudio,
       testCue: runner.testCue,
       refreshCameras: runner.refreshCameras,

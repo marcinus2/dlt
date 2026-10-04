@@ -42,7 +42,12 @@ export function noopEffects(opts: { cameraLive?: CameraInfo; cameras?: CameraDev
       onVoiceChange: () => () => {},
       voiceAvailable: () => true,
     },
-    wakeLock: { acquire() {}, release() {} },
+    wakeLock: { acquire() {}, release() {}, onChange: () => () => {} },
+    platform: {
+      onVisibility: () => () => {},
+      cameraPermission: () => Promise.resolve(null),
+      unloadGuard() {},
+    },
     settings: createSettingsStorage(memoryBackend()),
   };
 }

@@ -63,16 +63,17 @@ describe('CameraSource start', () => {
       facing: 'environment',
       deviceId: 'cam-1',
       fpsFallback: false,
+      deviceFallback: false,
       exposure: { supported: false },
       focus: { supported: false },
     });
   });
 
-  it('saved deviceId missing -> retries with facingMode', async () => {
+  it('saved deviceId missing -> retries with facingMode, reported as deviceFallback', async () => {
     const { md, source } = setup([{ name: 'OverconstrainedError', constraint: 'deviceId' }, fakeTrack()], {
       deviceId: 'gone',
     });
-    await source.start();
+    expect((await source.start()).deviceFallback).toBe(true);
     expect(videoOf(md.calls[0] as MediaStreamConstraints).deviceId).toEqual({ exact: 'gone' });
     expect(videoOf(md.calls[1] as MediaStreamConstraints).deviceId).toBeUndefined();
     expect(videoOf(md.calls[1] as MediaStreamConstraints).facingMode).toEqual({ ideal: 'user' });
