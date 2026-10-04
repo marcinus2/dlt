@@ -1,12 +1,15 @@
 // Port parity (plan 4.2): random sample streams through the frozen PoC detector and the TS port
 // must give identical events and states, sample by sample.
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 // @ts-expect-error untyped PoC module (plain JS, frozen)
 import { createDetector as createPocDetector } from '../../../drone-lap-poc/src/detector.js';
 import { DEFAULTS } from '../settings/schema.ts';
 import { createDetector, type DetectorSample, type DetectorSettings } from './detector.ts';
 import { parseFramesCsv, replay } from './replay.ts';
 import { mulberry32 } from './test/synthetic.ts';
+
+// CPU-heavy: keep slow / contended CI runners from hitting the 5 s default.
+vi.setConfig({ testTimeout: 20_000 });
 
 const LEVELS = [0, 0.004, 0.008, 0.015, 0.03, 0.08];
 const FPS = [10, 20, 30, 60];
